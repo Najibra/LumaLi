@@ -10,6 +10,7 @@ One small `.exe`, no installer, no account, no telemetry.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d6)
 ![.NET 8](https://img.shields.io/badge/.NET-8-512bd4)
+[![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Najibra)
 
 ![LumaLi's Lightbeam layout on the 8.8-inch screen](docs/hero-lightbeam.jpg)
 
@@ -105,6 +106,10 @@ This gives a single `dist\LumaLi.exe`. `LumaLi.exe --test <folder>` runs 144 off
 ## How it works
 
 LumaLi is a .NET 8 WinForms app. Screens are drawn with GDI+ and sent as JPEG frames; sensors come from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). The USB protocols are documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+## Support LumaLi
+
+LumaLi is free and always will be. If it brightens up your build, you can support its development through [GitHub Sponsors](https://github.com/sponsors/Najibra) — every bit helps keep new layouts and devices coming. Stars, bug reports and shared screenshots help too.
 
 ## Credits
 
