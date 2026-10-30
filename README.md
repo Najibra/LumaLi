@@ -41,6 +41,7 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 - **Export and import layouts** as `.json` to share them.
 - **21 fan-screen faces**, each with its own sensor, label, two colours, rotation and optional background image or GIF.
 - **Lighting:** 20 animated fan effects with their own speed, brightness and colours, and a light strip that can **match the screen layout** — the strip takes its colours and movement from whatever the screen is showing.
+- **Standby screen:** a calm face with your logo (or the LumaLi mark), a large clock and the date, shown when the PC is idle or locked and left on the screen as it sleeps, hibernates or shuts down (if your motherboard keeps USB powered).
 - **Cooling:** presets, an automatic curve that follows GPU or CPU temperature (with a fail-safe to 100 % if the sensor stops), per-group trim and fan calibration.
 
 ## Screenshots

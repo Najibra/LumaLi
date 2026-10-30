@@ -213,6 +213,50 @@ public sealed class SettingsPage : Page
 				(Control?)new Btn("Exit LumaLi", Main.ExitApp)
 			}
 		});
+		// the 8.8" screen's standby face: when it comes on, how bright it is, and the logo on it
+		Card standbyCard = AddCard("Standby screen", 1074);
+		StandbySettings sb = settings.Standby;
+		Toggle sbOn = new Toggle("Show the standby face (logo, clock and date)", sb.Enabled);
+		sbOn.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.Enabled = sbOn.Checked; }); };
+		Toggle sbLock = new Toggle("When the PC is locked", sb.WhenLocked);
+		sbLock.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.WhenLocked = sbLock.Checked; }); };
+		Toggle sbSleep = new Toggle("Leave it on the screen when the PC sleeps, hibernates or shuts down", sb.BeforeSleep);
+		sbSleep.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.BeforeSleep = sbSleep.Checked; }); };
+		Toggle sbClock = new Toggle("Also start the screen's own clock as the PC goes down (experimental)", sb.FirmwareClock);
+		sbClock.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.FirmwareClock = sbClock.Checked; }); };
+		FormGrid sbGrid = new FormGrid();
+		Slide(sbGrid, "After idle", 0, 60, sb.IdleMinutes, delegate(Settings x, int v) { x.Standby.IdleMinutes = v; }, " min");
+		Slide(sbGrid, "Brightness", 5, 100, sb.Brightness, delegate(Settings x, int v) { x.Standby.Brightness = v; }, "%");
+		Caption logoName = new Caption(string.IsNullOrEmpty(sb.Logo) ? "Logo: the LumaLi mark" : "Logo: " + Path.GetFileName(sb.Logo), Theme.SubText, Theme.Small);
+		Btn chooseLogo = new Btn("Choose logo…", delegate
+		{
+			using OpenFileDialog dialog = new OpenFileDialog { Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif", Title = "Choose a logo for the standby screen" };
+			if (dialog.ShowDialog(this) == DialogResult.OK)
+			{
+				string copy = Store.Import(dialog.FileName);
+				Change(delegate(Settings x) { x.Standby.Logo = copy; });
+				logoName.Text = "Logo: " + Path.GetFileName(copy);
+			}
+		}, primary: false, "");
+		Btn clearLogo = new Btn("Use the LumaLi mark", delegate
+		{
+			Change(delegate(Settings x) { x.Standby.Logo = null; });
+			logoName.Text = "Logo: the LumaLi mark";
+		});
+		standbyCard.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)sbOn,
+				(Control?)sbLock,
+				(Control?)sbGrid,
+				(Control?)new Caption("After idle: minutes without mouse or keyboard input before the standby face comes on (0 = only when locked or going to sleep).", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(24f)) },
+				(Control?)sbSleep,
+				(Control?)sbClock,
+				(Control?)new Stack(horizontal: true) { Controls = { (Control?)chooseLogo, (Control?)clearLogo, (Control?)logoName } },
+				(Control?)new Caption("When the PC is off, the screen only keeps showing something if your motherboard keeps USB powered (turn off ErP / deep sleep in the BIOS). The time then stays at the moment the PC went down, unless the screen's own clock takes over.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(44f)) }
+			}
+		});
 		AddCard("About", 1074).Controls.Add(new Stack
 		{
 			Controls = 

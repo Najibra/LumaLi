@@ -59,7 +59,7 @@ public sealed partial class ScreenRenderer
 	{
 		if (w.Effect != "lightbeam" || w.Kind != WidgetKind.Panel)
 		{
-			return false;
+			return DrawStandby(g, w, r, t);
 		}
 		Lightbeam(g, t);
 		return true;

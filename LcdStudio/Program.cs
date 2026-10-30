@@ -176,6 +176,62 @@ public static class Program
 			File.WriteAllText(Path.Combine(a2[1], "cost.txt"), $"{stopwatch.Elapsed.TotalMilliseconds / 60.0:0.0} ms per frame");
 			return 0;
 		}
+		if (args2.Contains("--clock-test"))
+		{
+			// --clock-test <dir>: tries the screen's built-in clock. Each step first shows its number on the screen, then
+			// turns the firmware clock on and stops sending frames for 15 s, so whoever is watching can see whether
+			// the screen draws its own clock. Close LumaLi first.
+			string dir = args2.SkipWhile((string x) => x != "--clock-test").Skip(1).FirstOrDefault() ?? ".";
+			Directory.CreateDirectory(dir);
+			string log = Path.Combine(dir, "clock-test.txt");
+			File.WriteAllText(log, "");
+			void Note(string s)
+			{
+				string line = $"{DateTime.Now:HH:mm:ss} {s}";
+				File.AppendAllText(log, line + Environment.NewLine);
+				Console.WriteLine(line);
+			}
+			byte[] Card(string big, string small)
+			{
+				using var bmp = new Bitmap(1920, 480);
+				using (Graphics g = Graphics.FromImage(bmp))
+				{
+					g.Clear(Color.FromArgb(10, 12, 24));
+					g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+					using var f1 = new Font("Segoe UI Semibold", 96f, GraphicsUnit.Pixel);
+					using var f2 = new Font("Segoe UI", 34f, GraphicsUnit.Pixel);
+					using var c = new StringFormat { Alignment = StringAlignment.Center };
+					g.DrawString(big, f1, Brushes.White, new RectangleF(0, 110, 1920, 130), c);
+					g.DrawString(small, f2, Brushes.LightSteelBlue, new RectangleF(0, 280, 1920, 60), c);
+				}
+				bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
+				return Imaging.Jpeg(bmp, 90);
+			}
+			UsbDeviceInfo screenInfo = WinUsb.Enumerate().FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen);
+			if (screenInfo == null)
+			{
+				Note("no 8.8\" screen found");
+				return 1;
+			}
+			using (LcdLink link = new LcdLink(screenInfo))
+			{
+				link.SendFrame(Card("CLOCK TEST", "watch this screen · 4 short steps · about a minute"), 80);
+				Note("firmware " + link.Firmware);
+				Thread.Sleep(4000);
+				(string, bool, byte)[] steps = { ("1", true, 2), ("2", true, 1), ("3", true, 0), ("4", true, 3) };
+				foreach (var (name, on, style) in steps)
+				{
+					link.SendFrame(Card("STEP " + name, "if a clock appears in the next 15 seconds, note the step number"), 80);
+					Thread.Sleep(2500);
+					Note($"step {name}: clock on, style {style}: " + link.Clock(on, style));
+					Thread.Sleep(15000);
+					Note($"step {name}: clock off: " + link.Clock(on: false, style));
+				}
+				link.SendFrame(Card("TEST DONE", "tell Claude which step showed a clock, if any"), 80);
+				Note("done");
+			}
+			return 0;
+		}
 		if (args2.Contains("--render-face"))
 		{
 			// --render-face Lightbeam <dir> --sensor gpu.load --values 30,30,80 --times 1,1.05,1.1: one still per time,

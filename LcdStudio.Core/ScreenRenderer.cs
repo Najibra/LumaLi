@@ -225,6 +225,7 @@ public sealed partial class ScreenRenderer : IDisposable
 				case "voidpanel":
 				case "constellation":
 				case "lightbeam":
+				case "standby":
 					flag3 = true;
 					break;
 				default:

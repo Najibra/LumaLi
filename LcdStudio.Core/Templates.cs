@@ -114,6 +114,7 @@ public static class Templates
 		{
 			CommandCenter(),
 			Lightbeam(),
+			Standby(),
 			Constellation(),
 			Void(),
 			Instrument(),
@@ -314,6 +315,25 @@ public static class Templates
 		return l;
 	}
 
+	/// <summary>
+	/// Standby: the quiet face LumaLi switches to when the PC is idle or locked, and leaves on the screen as it goes
+	/// to sleep or shuts down: a logo, a large clock and the date. The panel's image is the logo; LumaLi fills it
+	/// from Settings › Standby screen.
+	/// </summary>
+	private static ScreenLayout Standby()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Standby",
+			Description = "A logo, a large clock and the date: shown when the PC is idle, locked or going to sleep",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#030407",
+			Color2 = "#030407"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "standby", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
 	/// <summary>
 	/// Constellation: every sensor as a glossy orb on a tilted ring round a golden core, spokes carrying data ticks,
 	/// value bars and comets; every so often the ring folds into a network of category hubs tied to the core by

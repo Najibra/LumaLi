@@ -195,6 +195,23 @@ public sealed class LcdLink : IDisposable
 		_initialized = false;
 	}
 
+	/// <summary>
+	/// Sets the screen's own clock to now and turns its built-in clock display on or off (firmware commands 0x33 and
+	/// 0x34). style is the trailing byte of 0x33, which L-Connect sends as 2. Returns the two replies as hex, for testing.
+	/// </summary>
+	public string Clock(bool on, byte style = 2)
+	{
+		if (!_initialized)
+		{
+			Initialize();
+		}
+		DateTime now = DateTime.Now;
+		byte[] set = Command(51, 2000, (byte)(now.Year >> 8), (byte)now.Year, (byte)now.Month, (byte)now.Day, (byte)now.Hour, (byte)now.Minute, (byte)now.Second, style);
+		byte[] run = Command(52, 2000, (byte)(on ? 1 : 0));
+		string Hex(byte[] r) => r.Length == 0 ? "none" : BitConverter.ToString(r, 0, Math.Min(16, r.Length));
+		return Hex(set) + " | " + Hex(run);
+	}
+
 	public void Release()
 	{
 		try
@@ -227,6 +244,12 @@ public sealed class LcdLink : IDisposable
 	public void Dispose()
 	{
 		Release();
+		_usb.Dispose();
+	}
+
+	/// <summary>Lets go of the device without telling it to stop, so the last frame (or its own clock) stays up.</summary>
+	public void Leave()
+	{
 		_usb.Dispose();
 	}
 }

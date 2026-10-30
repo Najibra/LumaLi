@@ -348,12 +348,15 @@ public sealed class Engine : IDisposable
 	public void Suspend()
 	{
 		_resumeAfterWake = !Released;
+		Farewell();
 		Log.Write("system suspending: releasing devices");
 		Release();
 	}
 
 	public void Resume()
 	{
+		_farewell = false;
+		_farewellSent = false;
 		if (!_resumeAfterWake)
 		{
 			return;
@@ -589,6 +592,7 @@ public sealed class Engine : IDisposable
 					continue;
 				}
 				DateTime utcNow = DateTime.UtcNow;
+				bool standby = false;
 				try
 				{
 					if (lcdLink == null)
@@ -596,12 +600,14 @@ public sealed class Engine : IDisposable
 						lcdLink = new LcdLink(info);
 					}
 					ScreenLayout screenLayout;
+					standby = StandbyNow();
 					lock (Settings)
 					{
-						screenLayout = CurrentLayout.Clone();
+						screenLayout = standby ? StandbyLayout() : CurrentLayout.Clone();
 					}
+					int brightness = standby ? Math.Min(Settings.ScreenBrightness, Settings.Standby.Brightness) : Settings.ScreenBrightness;
 					bool flag = ScreenRenderer.IsAnimated(screenLayout);
-					string text2 = (flag ? null : string.Join("|", Sensors.Version, EditVersion, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, Settings.ScreenBrightness));
+					string text2 = (flag ? null : string.Join("|", Sensors.Version, EditVersion, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
 					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < 2.0)
 					{
 						Wait(ct, 100, wake);
@@ -623,7 +629,24 @@ public sealed class Engine : IDisposable
 						bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
 						array2 = Imaging.Jpeg(bitmap, Settings.ScreenQuality);
 					}
-					lcdLink.SendFrame(array2, Settings.ScreenBrightness);
+					lcdLink.SendFrame(array2, brightness);
+					// going to sleep or shutting down: the standby face is on the screen; start its own clock if asked, then signal
+					if (_farewell && standby && !_farewellSent)
+					{
+						if (Settings.Standby.FirmwareClock)
+						{
+							try
+							{
+								lcdLink.Clock(on: true);
+							}
+							catch (Exception ex2)
+							{
+								Log.Write("screen clock: " + ex2.Message);
+							}
+						}
+						_farewellSent = true;
+						_farewellDone.Set();
+					}
 					text = text2;
 					array = array2;
 					dateTime = DateTime.UtcNow;
@@ -646,15 +669,93 @@ public sealed class Engine : IDisposable
 					num = Math.Min(num * 2, 10000);
 					continue;
 				}
-				int num2 = 1000 / Math.Clamp(Settings.ScreenFps, 1, 30);
+				// standby needs only a few frames a second
+				int num2 = 1000 / Math.Clamp(standby ? Math.Min(Settings.ScreenFps, 8) : Settings.ScreenFps, 1, 30);
 				Wait(ct, num2 - (int)(DateTime.UtcNow - utcNow).TotalMilliseconds);
 			}
 		}
 		finally
 		{
-			lcdLink?.Dispose();
+			// after a farewell the screen keeps the standby face (or its own clock): let go without stopping it
+			if (_farewellSent)
+			{
+				lcdLink?.Leave();
+			}
+			else
+			{
+				lcdLink?.Dispose();
+			}
 			Screen.Running = false;
 		}
+	}
+
+	private volatile bool _locked, _farewell, _farewellSent;
+
+	private readonly ManualResetEventSlim _farewellDone = new ManualResetEventSlim(false);
+
+	[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+	private struct LastInputInfo
+	{
+		public uint Size;
+
+		public uint Time;
+	}
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool GetLastInputInfo(ref LastInputInfo info);
+
+	/// <summary>Seconds since the last mouse or keyboard input anywhere in the session.</summary>
+	public static double IdleSeconds()
+	{
+		var info = new LastInputInfo { Size = 8 };
+		return GetLastInputInfo(ref info) ? unchecked((uint)Environment.TickCount - info.Time) / 1000.0 : 0.0;
+	}
+
+	/// <summary>Called by the window when the session is locked or unlocked.</summary>
+	public void SetLocked(bool locked)
+	{
+		_locked = locked;
+		Poke();
+	}
+
+	/// <summary>Whether the 8.8" screen should be showing its standby face right now.</summary>
+	public bool StandbyNow()
+	{
+		StandbySettings s = Settings.Standby;
+		if (!s.Enabled)
+		{
+			return false;
+		}
+		return _farewell || (s.WhenLocked && _locked) || (s.IdleMinutes > 0 && IdleSeconds() >= s.IdleMinutes * 60.0);
+	}
+
+	/// <summary>The standby layout, a copy with the chosen logo in its panel.</summary>
+	private ScreenLayout StandbyLayout()
+	{
+		string name = Settings.Standby.Layout;
+		ScreenLayout layout = (Layouts.FirstOrDefault((ScreenLayout l) => l.Name == name) ?? Templates.All().First((ScreenLayout l) => l.Name == "Standby")).Clone();
+		foreach (Widget w in layout.Widgets.Where((Widget w) => w.Effect == "standby"))
+		{
+			w.Image = string.IsNullOrEmpty(Settings.Standby.Logo) ? null : Settings.Standby.Logo;
+		}
+		return layout;
+	}
+
+	/// <summary>
+	/// Puts the standby face on the screen before the PC sleeps, hibernates or shuts down, and waits up to two seconds
+	/// for it to be sent, so it is what stays on the screen while it still has power.
+	/// </summary>
+	public void Farewell()
+	{
+		if (!Settings.Standby.Enabled || !Settings.Standby.BeforeSleep || !Screen.Running)
+		{
+			return;
+		}
+		_farewellSent = false;
+		_farewellDone.Reset();
+		_farewell = true;
+		Poke();
+		_farewellDone.Wait(2000);
 	}
 
 	private static string Short(Exception e)

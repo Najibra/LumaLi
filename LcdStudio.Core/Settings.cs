@@ -50,6 +50,9 @@ public sealed class Settings
 	public CoolingSettings Cooling { get; set; } = new CoolingSettings();
 
 
+	public StandbySettings Standby { get; set; } = new StandbySettings();
+
+
 	public bool StartWithWindows { get; set; }
 
 	public bool CloseToTray { get; set; } = true;

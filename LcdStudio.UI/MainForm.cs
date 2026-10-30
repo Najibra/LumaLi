@@ -143,6 +143,7 @@ public sealed class MainForm : Form
 		thread.Name = "exit-signal";
 		thread.Start();
 		SystemEvents.PowerModeChanged += OnPowerModeChanged;
+		SystemEvents.SessionSwitch += OnSessionSwitch;
 		_engine.Changed += delegate
 		{
 			if (!base.IsHandleCreated || base.IsDisposed)
@@ -189,6 +190,19 @@ public sealed class MainForm : Form
 			_usbDebounce.Start();
 		}
 		base.WndProc(ref m);
+	}
+
+	// locking the PC puts the 8.8" screen on its standby face; unlocking brings the layout back
+	private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+	{
+		if (e.Reason == SessionSwitchReason.SessionLock)
+		{
+			_engine.SetLocked(locked: true);
+		}
+		else if (e.Reason == SessionSwitchReason.SessionUnlock)
+		{
+			_engine.SetLocked(locked: false);
+		}
 	}
 
 	private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
@@ -283,6 +297,11 @@ public sealed class MainForm : Form
 		}
 		else
 		{
+			// Windows is shutting down or signing out: leave the standby face on the screen as it goes
+			if (e.CloseReason == CloseReason.WindowsShutDown)
+			{
+				_engine.Farewell();
+			}
 			base.OnFormClosing(e);
 		}
 	}
@@ -313,6 +332,7 @@ public sealed class MainForm : Form
 		if (disposing)
 		{
 			SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+			SystemEvents.SessionSwitch -= OnSessionSwitch;
 			_tray.Dispose();
 			_timer.Dispose();
 		}
