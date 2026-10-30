@@ -1,4 +1,4 @@
-namespace LcdStudio.Core;
+﻿namespace LcdStudio.Core;
 
 /// <summary>When the 8.8" screen switches to its standby face, and how it looks there.</summary>
 public sealed class StandbySettings
@@ -17,8 +17,8 @@ public sealed class StandbySettings
 	public bool BeforeSleep { get; set; } = true;
 
 
-	/// <summary>Also turn on the screen's own clock as the PC goes down, if its firmware shows one.</summary>
-	public bool FirmwareClock { get; set; }
+	/// <summary>Hand the screen to its own built-in clock as the PC goes down, so it keeps showing the live time while it has power.</summary>
+	public bool FirmwareClock { get; set; } = true;
 
 
 	public string Layout { get; set; } = "Standby";

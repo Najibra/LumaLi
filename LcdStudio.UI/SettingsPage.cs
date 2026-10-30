@@ -222,7 +222,7 @@ public sealed class SettingsPage : Page
 		sbLock.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.WhenLocked = sbLock.Checked; }); };
 		Toggle sbSleep = new Toggle("Leave it on the screen when the PC sleeps, hibernates or shuts down", sb.BeforeSleep);
 		sbSleep.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.BeforeSleep = sbSleep.Checked; }); };
-		Toggle sbClock = new Toggle("Also start the screen's own clock as the PC goes down (experimental)", sb.FirmwareClock);
+		Toggle sbClock = new Toggle("Hand over to the screen's own clock as the PC goes down (keeps the live time while it has power)", sb.FirmwareClock);
 		sbClock.CheckedChanged += delegate { Change(delegate(Settings x) { x.Standby.FirmwareClock = sbClock.Checked; }); };
 		FormGrid sbGrid = new FormGrid();
 		Slide(sbGrid, "After idle", 0, 60, sb.IdleMinutes, delegate(Settings x, int v) { x.Standby.IdleMinutes = v; }, " min");
@@ -254,7 +254,7 @@ public sealed class SettingsPage : Page
 				(Control?)sbSleep,
 				(Control?)sbClock,
 				(Control?)new Stack(horizontal: true) { Controls = { (Control?)chooseLogo, (Control?)clearLogo, (Control?)logoName } },
-				(Control?)new Caption("When the PC is off, the screen only keeps showing something if your motherboard keeps USB powered (turn off ErP / deep sleep in the BIOS). The time then stays at the moment the PC went down, unless the screen's own clock takes over.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(44f)) }
+				(Control?)new Caption("When the PC is off, the screen only stays lit if your motherboard keeps USB powered: turn off ErP / deep sleep in the BIOS. With the screen's own clock, the time keeps running; without it, the standby face stays with the time the PC went down.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(44f)) }
 			}
 		});
 		AddCard("About", 1074).Controls.Add(new Stack
