@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
+using SkiaSharp;
 
 namespace LcdStudio.Core;
 
@@ -88,36 +89,42 @@ public sealed partial class ScreenRenderer
 		double f = Eased(w, Fraction(w), t);
 		const int segments = 48;
 		const float gapDeg = 2.2f, segDeg = 360f / segments;
-		using (var track = new Pen(Imaging.Hex(w.Track, Color.FromArgb(28, 120, 140, 200)), th))
+		// how many segments are lit, the last one only partly, so the ring glides rather than stepping
+		float fill = (float)(f * segments);
+		Color trackColor = Imaging.Hex(w.Track, Color.FromArgb(28, 120, 140, 200));
+		SkiaDraw(g, Rectangle.Ceiling(RectangleF.Inflate(r, th * 2f, th * 2f)), c =>
 		{
+			var oval = new SKRect(box.Left, box.Top, box.Right, box.Bottom);
+			using var arc = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = th, Color = SkiaKit.Sk(trackColor) };
 			for (int i = 0; i < segments; i++)
 			{
-				g.DrawArc(track, box, -90f + i * segDeg + gapDeg / 2f, segDeg - gapDeg);
+				c.DrawArc(oval, -90f + i * segDeg + gapDeg / 2f, segDeg - gapDeg, false, arc);
 			}
-		}
-		int lit = (int)Math.Round(f * segments);
-		for (int i = 0; i < lit; i++)
-		{
-			Color c = Along(palette, i / (double)Math.Max(1, segments - 1));
-			float start = -90f + i * segDeg + gapDeg / 2f;
-			using (var glow = new Pen(Color.FromArgb(45, c), th * 2.2f))
+			// the lit segments: a soft blurred glow added as light, then the segment itself, a touch lighter
+			using var glow = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = th * 1.7f, BlendMode = SKBlendMode.Plus, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, th * 0.7f) };
+			for (int i = 0; i < (int)Math.Ceiling(fill); i++)
 			{
-				g.DrawArc(glow, box, start, segDeg - gapDeg);
+				float lit = Math.Clamp(fill - i, 0f, 1f);
+				Color col = Along(palette, i / (double)Math.Max(1, segments - 1));
+				float start = -90f + i * segDeg + gapDeg / 2f;
+				glow.Color = SkiaKit.Sk(col, 0.5f * lit);
+				c.DrawArc(oval, start, segDeg - gapDeg, false, glow);
+				arc.Color = SkiaKit.Sk(Imaging.Mix(col, Color.White, 0.12), lit);
+				c.DrawArc(oval, start, segDeg - gapDeg, false, arc);
 			}
-			using var pen = new Pen(c, th);
-			g.DrawArc(pen, box, start, segDeg - gapDeg);
-		}
-		if (lit > 0)
-		{
-			double a = (-90.0 + lit * segDeg) * Math.PI / 180.0;
-			float cx = box.X + box.Width / 2f, cy = box.Y + box.Height / 2f, rad = box.Width / 2f;
-			float bx = cx + (float)(Math.Cos(a) * rad), by = cy + (float)(Math.Sin(a) * rad);
-			float pulse = (float)(th * (0.75 + 0.25 * Math.Sin(t * 3.0)));
-			using var bead = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
-			using var halo = new SolidBrush(Color.FromArgb(70, Along(palette, f)));
-			g.FillEllipse(halo, bx - pulse * 1.6f, by - pulse * 1.6f, pulse * 3.2f, pulse * 3.2f);
-			g.FillEllipse(bead, bx - pulse * 0.55f, by - pulse * 0.55f, pulse * 1.1f, pulse * 1.1f);
-		}
+			if (fill > 0.05f)
+			{
+				// the bead riding the head of the fill, breathing, lit in the colour it has reached
+				double a = (-90.0 + fill * segDeg) * Math.PI / 180.0;
+				float cx = oval.MidX, cy = oval.MidY, rad = oval.Width / 2f;
+				float bx = cx + (float)(Math.Cos(a) * rad), by = cy + (float)(Math.Sin(a) * rad);
+				float pulse = (float)(th * (0.8 + 0.2 * Math.Sin(t * 3.0)));
+				Color head = Along(palette, f);
+				SkiaKit.Glow(c, bx, by, pulse * 2.4f, pulse * 2.4f, SkiaKit.Sk(head, 0.6f), SKBlendMode.Plus);
+				using var bead = new SKPaint { IsAntialias = true, Color = SkiaKit.Sk(Imaging.Mix(head, Color.White, 0.7)) };
+				c.DrawCircle(bx, by, pulse * 0.55f, bead);
+			}
+		});
 		string value = Formatted(w) + (Sensors.Def(w.Sensor).Unit == "%" ? "%" : "");
 		var mid = new RectangleF(box.X, box.Y + box.Height * 0.28f, box.Width, w.Size * 1.3f);
 		Text(g, w, mid, value, ValueColor(w), w.Size);
@@ -204,14 +211,16 @@ public sealed partial class ScreenRenderer
 		}
 		Color accent = Imaging.Hex(w.Print, Color.Cyan);
 		float x0 = r.X + w.Radius + 6f, len = Math.Min(90f, r.Width * 0.3f);
-		using (var glow = new Pen(Color.FromArgb(60, accent), 6f))
+		// the lit stroke along the top edge: a soft glow spilling onto the panel, then a fine tube tapering at its ends
+		SkiaDraw(g, Rectangle.Ceiling(new RectangleF(x0 - 16f, r.Y - 14f, len + 32f, 34f)), c =>
 		{
-			g.DrawLine(glow, x0, r.Y, x0 + len, r.Y);
-		}
-		using (var stroke = new Pen(accent, 2f))
-		{
-			g.DrawLine(stroke, x0, r.Y, x0 + len, r.Y);
-		}
+			using var glow = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 7f, StrokeCap = SKStrokeCap.Round, BlendMode = SKBlendMode.Plus, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4.5f), Color = SkiaKit.Sk(accent, 0.8f) };
+			c.DrawLine(x0, r.Y, x0 + len, r.Y, glow);
+			using var shade = SKShader.CreateLinearGradient(new SKPoint(x0, 0f), new SKPoint(x0 + len, 0f),
+				new[] { SkiaKit.Sk(accent, 0.8f), SkiaKit.Sk(Imaging.Mix(accent, Color.White, 0.2)), SkiaKit.Sk(accent, 0.75f) }, new[] { 0f, 0.35f, 1f }, SKShaderTileMode.Clamp);
+			using var tube = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2.5f, StrokeCap = SKStrokeCap.Round, Shader = shade };
+			c.DrawLine(x0, r.Y, x0 + len, r.Y, tube);
+		});
 		if (w.Text.Length > 0)
 		{
 			string spaced = string.Join(" ", Resolve(w.Text).ToUpperInvariant().ToCharArray());
@@ -256,34 +265,53 @@ public sealed partial class ScreenRenderer
 		Color top = palette[0], bottom = palette[palette.Length - 1];
 		float barW = Math.Max(3f, w.Thickness), gap = Math.Max(2f, barW * 0.45f);
 		int n = Math.Min(data.Length, (int)((r.Width + gap) / (barW + gap)));
-		SmoothingMode mode = g.SmoothingMode;
-		g.SmoothingMode = SmoothingMode.None;
+		if (n < 1)
+		{
+			return;
+		}
 		double sum = 0;
 		for (int i = 0; i < n; i++)
 		{
-			float v = data[data.Length - n + i];
-			sum += v;
-			float f = (float)Math.Clamp((v - w.Min) / Math.Max(0.001, w.Max - w.Min), 0.0, 1.0);
-			float h = Math.Max(2f, f * r.Height);
-			float x = (float)Math.Round(r.Right - (n - i) * (barW + gap) + gap);
-			var bar = new RectangleF(x, r.Bottom - h, barW, h);
-			bool newest = i == n - 1;
-			int alpha = newest ? 255 : (int)(150 + 80 * i / (double)n);
-			using (var fill = new LinearGradientBrush(new RectangleF(bar.X, bar.Y - 1f, bar.Width, bar.Height + 2f), Color.FromArgb(alpha, top), Color.FromArgb(alpha / 4, bottom), 90f))
-			{
-				g.FillRectangle(fill, bar);
-			}
-			using var cap = new SolidBrush(Color.FromArgb(newest ? 255 : 200, Imaging.Mix(top, Color.White, newest ? 0.6 : 0.25)));
-			g.FillRectangle(cap, bar.X, bar.Y, bar.Width, 2f);
+			sum += data[data.Length - n + i];
 		}
-		g.SmoothingMode = mode;
-		// the newest bar breathes a glow, and the average is a dashed line across the chart
-		float lastF = (float)Math.Clamp((data[data.Length - 1] - w.Min) / Math.Max(0.001, w.Max - w.Min), 0.0, 1.0);
-		float lx = r.Right - barW, ly = r.Bottom - Math.Max(2f, lastF * r.Height);
-		using (var halo = new SolidBrush(Color.FromArgb((int)(50 + 40 * Math.Sin(t * 3.0)), top)))
+		float F(float v) => (float)Math.Clamp((v - w.Min) / Math.Max(0.001, w.Max - w.Min), 0.0, 1.0);
+		SkiaDraw(g, Rectangle.Ceiling(RectangleF.Inflate(r, 10f, 10f)), c =>
 		{
-			g.FillRectangle(halo, lx - barW * 0.6f, ly - 6f, barW * 2.2f, r.Bottom - ly + 6f);
-		}
+			// every bar with rounded top corners; their glow is drawn once for all of them, blurred and added as light
+			var bars = new SKRoundRect[n];
+			using var all = new SKPath();
+			for (int i = 0; i < n; i++)
+			{
+				float h = Math.Max(2f, F(data[data.Length - n + i]) * r.Height);
+				float x = r.Right - (n - i) * (barW + gap) + gap;
+				var rr = new SKRoundRect();
+				float round = Math.Min(barW / 2f, h / 2f);
+				rr.SetRectRadii(new SKRect(x, r.Bottom - h, x + barW, r.Bottom), new[] { new SKPoint(round, round), new SKPoint(round, round), new SKPoint(0f, 0f), new SKPoint(0f, 0f) });
+				bars[i] = rr;
+				all.AddRoundRect(rr);
+			}
+			using (var glow = new SKPaint { IsAntialias = true, BlendMode = SKBlendMode.Plus, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, barW * 0.9f), Color = SkiaKit.Sk(top, 0.28f) })
+			{
+				c.DrawPath(all, glow);
+			}
+			using var p = new SKPaint { IsAntialias = true };
+			for (int i = 0; i < n; i++)
+			{
+				SKRect b = bars[i].Rect;
+				bool newest = i == n - 1;
+				float alpha = newest ? 1f : (150f + 80f * i / n) / 255f;
+				using var shade = SKShader.CreateLinearGradient(new SKPoint(0f, b.Top), new SKPoint(0f, b.Bottom),
+					new[] { SkiaKit.Sk(Imaging.Mix(top, Color.White, newest ? 0.35 : 0.1), alpha), SkiaKit.Sk(top, alpha * 0.8f), SkiaKit.Sk(bottom, alpha / 4f) }, new[] { 0f, 0.12f, 1f }, SKShaderTileMode.Clamp);
+				p.Shader = shade;
+				c.DrawRoundRect(bars[i], p);
+			}
+			p.Shader = null;
+			// the newest bar breathes a soft glow round itself
+			SKRect last = bars[n - 1].Rect;
+			float breath = (float)(0.55 + 0.45 * Math.Sin(t * 3.0));
+			SkiaKit.Glow(c, last.MidX, last.Top + 2f, barW * 2.2f, barW * 2.2f, SkiaKit.Sk(top, 0.5f * breath), SKBlendMode.Plus);
+		});
+		// the average is a dashed line across the chart
 		float avg = (float)Math.Clamp((sum / n - w.Min) / Math.Max(0.001, w.Max - w.Min), 0.0, 1.0);
 		using var avgPen = new Pen(Color.FromArgb(150, Imaging.Mix(top, Color.White, 0.4)), 1f) { DashPattern = new[] { 6f, 4f } };
 		float ay = (float)Math.Round(r.Bottom - avg * r.Height);
@@ -315,12 +343,34 @@ public sealed partial class ScreenRenderer
 					float f = (float)Math.Clamp((data[data.Length - n + i] - def.Min) / Math.Max(0.001, def.Max - def.Min), 0.0, 1.0);
 					pts[i] = new PointF(r.Right - r.Width * (n - 1 - i) / (float)(n - 1), r.Bottom - f * r.Height);
 				}
-				using (var glow = new Pen(Color.FromArgb(50, c), 6f) { LineJoin = LineJoin.Round })
+				// a smooth curve through the history: a faint wash of its colour beneath it, a soft blurred glow, the
+				// line itself, and a glowing dot at the latest reading
+				SkiaDraw(g, Rectangle.Ceiling(RectangleF.Inflate(r, 10f, 10f)), sc =>
 				{
-					g.DrawLines(glow, pts);
-				}
-				using var pen = new Pen(c, 2f) { LineJoin = LineJoin.Round };
-				g.DrawLines(pen, pts);
+					using SKPath curve = SkiaKit.Curve(pts);
+					using (var area = new SKPath(curve))
+					{
+						area.LineTo(pts[^1].X, r.Bottom);
+						area.LineTo(pts[0].X, r.Bottom);
+						area.Close();
+						using var wash = SKShader.CreateLinearGradient(new SKPoint(0f, r.Top), new SKPoint(0f, r.Bottom), new[] { SkiaKit.Sk(c, 0.2f), SkiaKit.Sk(c, 0f) }, null, SKShaderTileMode.Clamp);
+						using var fillPaint = new SKPaint { IsAntialias = true, Shader = wash, BlendMode = SKBlendMode.Plus };
+						sc.DrawPath(area, fillPaint);
+					}
+					using var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeJoin = SKStrokeJoin.Round, StrokeCap = SKStrokeCap.Round, BlendMode = SKBlendMode.Plus };
+					line.StrokeWidth = 6f;
+					line.Color = SkiaKit.Sk(c, 0.45f);
+					line.MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4f);
+					sc.DrawPath(curve, line);
+					line.MaskFilter = null;
+					line.StrokeWidth = 2f;
+					line.BlendMode = SKBlendMode.SrcOver;
+					line.Color = SkiaKit.Sk(Imaging.Mix(c, Color.White, 0.1));
+					sc.DrawPath(curve, line);
+					SkiaKit.Glow(sc, pts[^1].X, pts[^1].Y, 9f, 9f, SkiaKit.Sk(c, 0.7f), SKBlendMode.Plus);
+					using var dot = new SKPaint { IsAntialias = true, Color = SkiaKit.Sk(Imaging.Mix(c, Color.White, 0.6)) };
+					sc.DrawCircle(pts[^1].X, pts[^1].Y, 2.6f, dot);
+				});
 			}
 			float? now = _sensors.Get(sensors[k]);
 			string legend = $"{def.Label.ToUpperInvariant()}  {(now.HasValue ? now.Value.ToString("0", CultureInfo.InvariantCulture) : "--")}{def.Unit}";
@@ -363,17 +413,18 @@ public sealed partial class ScreenRenderer
 			if (d == now.Day)
 			{
 				var tile = RectangleF.Inflate(cell, -cellW * 0.12f, -cellH * 0.1f);
-				int glow = (int)(70 + 50 * Math.Sin(t * 2.2));
-				using (GraphicsPath halo = Imaging.Round(RectangleF.Inflate(tile, 4f, 4f), 8f))
-				using (var hb = new SolidBrush(Color.FromArgb(glow, today)))
+				float breath = (float)(0.6 + 0.4 * Math.Sin(t * 2.2));
+				// today's tile with a soft glow round it that breathes
+				SkiaDraw(g, Rectangle.Ceiling(RectangleF.Inflate(tile, 20f, 20f)), c =>
 				{
-					g.FillPath(hb, halo);
-				}
-				using (GraphicsPath tp = Imaging.Round(tile, 6f))
-				using (var tb = new SolidBrush(today))
-				{
-					g.FillPath(tb, tp);
-				}
+					var box = new SKRect(tile.Left, tile.Top, tile.Right, tile.Bottom);
+					using var halo = new SKPaint { IsAntialias = true, BlendMode = SKBlendMode.Plus, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 7f), Color = SkiaKit.Sk(today, 0.75f * breath) };
+					c.DrawRoundRect(SKRect.Inflate(box, 2f, 2f), 8f, 8f, halo);
+					using var shade = SKShader.CreateLinearGradient(new SKPoint(0f, box.Top), new SKPoint(0f, box.Bottom),
+						new[] { SkiaKit.Sk(Imaging.Mix(today, Color.White, 0.15)), SkiaKit.Sk(today) }, null, SKShaderTileMode.Clamp);
+					using var fillPaint = new SKPaint { IsAntialias = true, Shader = shade };
+					c.DrawRoundRect(box, 6f, 6f, fillPaint);
+				});
 				using var white = new SolidBrush(Color.White);
 				g.DrawString(d.ToString(CultureInfo.InvariantCulture), font, white, cell, sf);
 				continue;

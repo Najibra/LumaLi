@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -21,7 +21,7 @@ public sealed partial class Faces : IDisposable
 	public static readonly string[] Names =
 	{
 		"Glass Slab", "Fading", "Molten Glass", "Neon Ring", "Dot Matrix", "Carved", "Liquid", "Reactor", "3D Number", "Light on Text",
-		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Image / GIF"
+		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Lottie Gauge", "Image / GIF"
 	};
 
 	private readonly Dictionary<string, Image?> _images = new Dictionary<string, Image>();
@@ -76,6 +76,7 @@ public sealed partial class Faces : IDisposable
 			"Gap" => (First: "Ink", Second: "Page"),
 			"Headline" => (First: "Paint", Second: "Ink"),
 			"Lightbeam" => (First: "Crest", Second: "Flanks"),
+			"Lottie Gauge" => (First: "Start", Second: "End"),
 			_ => (First: "Text", Second: "Tint"), 
 		};
 	}
@@ -103,6 +104,7 @@ public sealed partial class Faces : IDisposable
 			"Gap" => ("#0e0e0e", "#f6f5f1"),
 			"Headline" => ("#d02a42", "#1d2b52"),
 			"Lightbeam" => ("#ffece0", "#9aa6f2"),
+			"Lottie Gauge" => ("#3af0ff", "#ff3d8b"),
 			_ => ("#ffffff", "#000000"), 
 		};
 	}
@@ -153,7 +155,7 @@ public sealed partial class Faces : IDisposable
 		case "Clock":
 			return false;
 		case "Image / GIF":
-			return f.Background?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ?? false;
+			return Imaging.IsMoving(f.Background);
 		default:
 			return true;
 		}
@@ -245,7 +247,7 @@ public sealed partial class Faces : IDisposable
 		FaceContext x = new FaceContext(graphics, fan, ValueText(fan.Sensor, value), Fraction(fan.Sensor, value), string.IsNullOrWhiteSpace(fan.Label) ? Caption(fan.Sensor) : fan.Label.ToUpperInvariant(), c, c2, t);
 		graphics.Clear(Color.Black);
 		Image image = GetImage(fan.Background);
-		if (image != null && fan.Face != "Image / GIF")
+		if (image != null && fan.Face != "Image / GIF" && fan.Face != "Lottie Gauge")
 		{
 			Imaging.DrawCover(graphics, image, new RectangleF(0f, 0f, 400f, 400f), t, 0.55f);
 		}
@@ -258,13 +260,13 @@ public sealed partial class Faces : IDisposable
 			Fading(x);
 			break;
 		case "Molten Glass":
-			Molten(x);
+			MoltenSkia(x);
 			break;
 		case "Neon Ring":
 			NeonRing(x);
 			break;
 		case "Dot Matrix":
-			DotMatrix(x);
+			DotMatrixSkia(x);
 			break;
 		case "Carved":
 			Carved(x);
@@ -285,7 +287,7 @@ public sealed partial class Faces : IDisposable
 			Prism(x);
 			break;
 		case "Warp":
-			Warp(x);
+			WarpSkia(x);
 			break;
 		case "Cut Paper":
 			CutPaper(x);
@@ -310,6 +312,9 @@ public sealed partial class Faces : IDisposable
 			break;
 		case "Lightbeam":
 			Lightbeam(x);
+			break;
+		case "Lottie Gauge":
+			LottieGauge(x, image);
 			break;
 		default:
 			ImageFace(x, image);
@@ -468,44 +473,6 @@ public sealed partial class Faces : IDisposable
 		Small(g, x.Time, Imaging.WithAlpha(x.C1, 170), 108f, 12f, bold: false);
 	}
 
-	private void Molten(FaceContext x)
-	{
-		Graphics g = x.G;
-		g.Clear(Color.FromArgb(10, 4, 4));
-		for (int num = 190; num >= 70; num -= 6)
-		{
-			double num2 = 0.5 + 0.5 * Math.Sin((double)num * 0.11 - x.T * 4.0);
-			using Pen pen = new Pen(Imaging.Mix(Color.FromArgb(40, 0, 0), x.C2, 0.35 + 0.65 * num2 * ((double)num / 190.0)), 7f);
-			g.DrawEllipse(pen, 200 - num, 200 - num, num * 2, num * 2);
-		}
-		for (int i = 0; i < 26; i++)
-		{
-			float x2 = 40 + i * 13;
-			using SolidBrush brush = new SolidBrush(Color.FromArgb(Math.Clamp((int)(40.0 + 40.0 * Math.Sin((double)i * 1.7 + x.T * 5.0)), 0, 255), 0, 0, 0));
-			g.FillRectangle(brush, x2, 0f, 4f, 400f);
-		}
-		using (GraphicsPath graphicsPath = new GraphicsPath())
-		{
-			graphicsPath.AddEllipse(150, 300, 100, 60);
-			PathGradientBrush pathGradientBrush = new PathGradientBrush(graphicsPath);
-			pathGradientBrush.CenterColor = x.C1;
-			pathGradientBrush.SurroundColors = new Color[1] { Color.FromArgb(0, x.C2) };
-			using PathGradientBrush brush2 = pathGradientBrush;
-			g.FillPath(brush2, graphicsPath);
-		}
-		using (SolidBrush brush3 = new SolidBrush(Color.FromArgb(235, 8, 8, 10)))
-		{
-			g.FillEllipse(brush3, 95, 95, 210, 210);
-		}
-		using (GraphicsPath path = FitText(x.Value, "Segoe UI", FontStyle.Regular, new RectangleF(125f, 158f, 150f, 74f)))
-		{
-			using SolidBrush brush4 = new SolidBrush(Color.White);
-			g.FillPath(brush4, path);
-		}
-		Small(g, ShortLabelOr(x), Color.FromArgb(220, 255, 255, 255), 140f, 12f, bold: true, 1f);
-		Small(g, x.Time, Color.FromArgb(200, 255, 255, 255), 252f, 11f, bold: false);
-	}
-
 	private static string ShortLabelOr(FaceContext x)
 	{
 		if (!string.IsNullOrWhiteSpace(x.Fan.Label))
@@ -513,82 +480,6 @@ public sealed partial class Faces : IDisposable
 			return x.Fan.Label.ToUpperInvariant();
 		}
 		return ShortLabel(x.Fan.Sensor);
-	}
-
-	private void NeonRing(FaceContext x)
-	{
-		Graphics g = x.G;
-		g.Clear(Color.FromArgb(6, 6, 14));
-		RectangleF rect = new RectangleF(48f, 48f, 304f, 304f);
-		using (Pen pen = new Pen(Color.FromArgb(40, 255, 255, 255), 16f))
-		{
-			g.DrawEllipse(pen, rect);
-		}
-		float sweepAngle = Math.Max(2f, x.Fraction * 360f);
-		using (GraphicsPath graphicsPath = new GraphicsPath())
-		{
-			graphicsPath.AddArc(rect, -90f, sweepAngle);
-			Glow(g, graphicsPath, x.C1, 5, 6f);
-			using Pen pen2 = new Pen(new LinearGradientBrush(rect, x.C1, x.C2, 45f), 16f)
-			{
-				StartCap = LineCap.Round,
-				EndCap = LineCap.Round
-			};
-			g.DrawPath(pen2, graphicsPath);
-		}
-		double num = x.T * 1.6;
-		float num2 = 200f + (float)Math.Cos(num) * 172f;
-		float num3 = 200f + (float)Math.Sin(num) * 172f;
-		using (SolidBrush brush = new SolidBrush(Imaging.WithAlpha(x.C2, 200)))
-		{
-			g.FillEllipse(brush, num2 - 4f, num3 - 4f, 8f, 8f);
-		}
-		using (GraphicsPath graphicsPath2 = FitText(x.Value, "Segoe UI Semibold", FontStyle.Regular, new RectangleF(110f, 150f, 180f, 92f)))
-		{
-			Glow(g, graphicsPath2, x.C1, 4, 3f);
-			using SolidBrush brush2 = new SolidBrush(Color.White);
-			g.FillPath(brush2, graphicsPath2);
-		}
-		Small(g, x.Label, Imaging.WithAlpha(x.C1, 220), 128f, 12f, bold: true, 1f);
-		Small(g, x.Time, Color.FromArgb(170, 255, 255, 255), 268f, 13f, bold: false);
-	}
-
-	private static void DotMatrix(FaceContext x)
-	{
-		Graphics g = x.G;
-		g.Clear(x.C2);
-		string value = x.Value;
-		int num = value.Length * 6 - 1;
-		float num2 = Math.Min(300f / (float)Math.Max(1, num), 22f);
-		float num3 = 200f - (float)num * num2 / 2f;
-		float num4 = 200f - 3.5f * num2;
-		using SolidBrush solidBrush2 = new SolidBrush(Imaging.WithAlpha(x.C1, 28));
-		using SolidBrush solidBrush = new SolidBrush(x.C1);
-		using SolidBrush brush = new SolidBrush(Imaging.WithAlpha(x.C1, 50));
-		for (int i = 0; i < value.Length; i++)
-		{
-			Glyphs5x7.TryGetValue(value[i], out string[] value2);
-			for (int j = 0; j < 7; j++)
-			{
-				for (int k = 0; k < 5; k++)
-				{
-					float num5 = num3 + (float)(i * 6 + k) * num2;
-					float num6 = num4 + (float)j * num2;
-					bool flag = value2 != null && value2[j][k] == '1';
-					if (flag && Math.Sin(x.T * 7.0 + (double)(i * 13) + (double)(j * 3) + (double)(k * 5)) > 0.985)
-					{
-						flag = false;
-					}
-					if (flag)
-					{
-						g.FillEllipse(brush, num5 - num2 * 0.2f, num6 - num2 * 0.2f, num2 * 1.2f, num2 * 1.2f);
-					}
-					g.FillEllipse(flag ? solidBrush : solidBrush2, num5 + num2 * 0.1f, num6 + num2 * 0.1f, num2 * 0.8f, num2 * 0.8f);
-				}
-			}
-		}
-		Small(g, x.Label, Imaging.WithAlpha(x.C1, 200), num4 - 26f, 13f, bold: true, 1f);
-		Small(g, x.Time, Imaging.WithAlpha(x.C1, 160), num4 + 7f * num2 + 24f, 13f, bold: false);
 	}
 
 	private void Carved(FaceContext x)
@@ -653,52 +544,6 @@ public sealed partial class Faces : IDisposable
 		}
 		Small(g, x.Label, Color.FromArgb(220, 255, 255, 255), 120f, 12f, bold: true, 1f);
 		Small(g, x.Time, Color.FromArgb(200, 255, 255, 255), 270f, 13f, bold: false);
-	}
-
-	private void Reactor(FaceContext x)
-	{
-		Graphics g = x.G;
-		g.Clear(Color.FromArgb(2, 6, 14));
-		for (int i = 0; i < 3; i++)
-		{
-			float num = 175 - i * 30;
-			double num2 = x.T * ((i % 2 == 0) ? 0.8 : (-1.2)) * 60.0;
-			int num3 = 10 + i * 4;
-			for (int j = 0; j < num3; j++)
-			{
-				float startAngle = (float)(num2 + (double)j * 360.0 / (double)num3);
-				using Pen pen = new Pen(Imaging.WithAlpha(x.C2, 120 + i * 40), 9 - i * 2);
-				g.DrawArc(pen, 200f - num, 200f - num, num * 2f, num * 2f, startAngle, 360f / (float)num3 * 0.6f);
-			}
-		}
-		using (GraphicsPath graphicsPath = new GraphicsPath())
-		{
-			graphicsPath.AddArc(70, 70, 260, 260, 135f, 270f * Math.Max(0.01f, x.Fraction));
-			Glow(g, graphicsPath, x.C1, 5);
-			using Pen pen2 = new Pen(x.C1, 8f)
-			{
-				StartCap = LineCap.Round,
-				EndCap = LineCap.Round
-			};
-			g.DrawPath(pen2, graphicsPath);
-		}
-		double num4 = 0.6 + 0.4 * Math.Sin(x.T * 3.0);
-		using (GraphicsPath graphicsPath2 = new GraphicsPath())
-		{
-			graphicsPath2.AddEllipse(110, 110, 180, 180);
-			PathGradientBrush pathGradientBrush = new PathGradientBrush(graphicsPath2);
-			pathGradientBrush.CenterColor = Imaging.WithAlpha(x.C1, (int)(140.0 * num4));
-			pathGradientBrush.SurroundColors = new Color[1] { Color.Transparent };
-			using PathGradientBrush brush = pathGradientBrush;
-			g.FillPath(brush, graphicsPath2);
-		}
-		using GraphicsPath path = FitText(x.Value, "Consolas", FontStyle.Bold, new RectangleF(120f, 165f, 160f, 70f));
-		using (SolidBrush brush2 = new SolidBrush(Color.White))
-		{
-			g.FillPath(brush2, path);
-		}
-		Small(g, ShortLabelOr(x), Imaging.WithAlpha(x.C1, 230), 148f, 12f, bold: true, 1f);
-		Small(g, x.Time, Imaging.WithAlpha(x.C1, 190), 252f, 12f, bold: false);
 	}
 
 	private void Extruded(FaceContext x)
@@ -796,30 +641,6 @@ public sealed partial class Faces : IDisposable
 		}
 		Small(g, x.Label, Imaging.WithAlpha(x.C1, 200), 100f, 13f, bold: true, 1f);
 		Small(g, x.Time, Imaging.WithAlpha(x.C1, 170), 300f, 13f, bold: false);
-	}
-
-	private void Warp(FaceContext x)
-	{
-		Graphics g = x.G;
-		g.Clear(Color.Black);
-		double num = 0.25 + (double)x.Fraction * 1.4;
-		for (int i = 0; i < 90; i++)
-		{
-			double num2 = Hash01(i) * Math.PI * 2.0;
-			double num3 = (x.T * num + Hash01(i * 3 + 1)) % 1.0;
-			float num4 = (float)(num3 * num3 * 260.0);
-			float num5 = (float)(Math.Min(1.0, num3 + 0.06) * Math.Min(1.0, num3 + 0.06) * 260.0);
-			using Pen pen = new Pen(Imaging.WithAlpha(x.C1, (int)(60.0 + 195.0 * num3)), (float)(1.0 + num3 * 2.5));
-			g.DrawLine(pen, 200f + (float)Math.Cos(num2) * num4, 200f + (float)Math.Sin(num2) * num4, 200f + (float)Math.Cos(num2) * num5, 200f + (float)Math.Sin(num2) * num5);
-		}
-		using GraphicsPath graphicsPath = FitText(x.Value, "Segoe UI", FontStyle.Bold, new RectangleF(100f, 150f, 200f, 96f));
-		Glow(g, graphicsPath, x.C1, 4, 3f);
-		using (SolidBrush brush = new SolidBrush(x.C2))
-		{
-			g.FillPath(brush, graphicsPath);
-		}
-		Small(g, x.Label, Imaging.WithAlpha(x.C2, 200), 128f, 12f, bold: true, 1f);
-		Small(g, x.Time, Imaging.WithAlpha(x.C2, 170), 268f, 12f, bold: false);
 	}
 
 	private static double Hash01(int i)
@@ -944,7 +765,54 @@ public sealed partial class Faces : IDisposable
 			return;
 		}
 		g.Clear(Color.FromArgb(20, 24, 50));
-		Small(g, "Upload an image or GIF", Color.FromArgb(200, 255, 255, 255), 200f, 16f, bold: false);
+		Small(g, "Upload an image, GIF or Lottie", Color.FromArgb(200, 255, 255, 255), 200f, 16f, bold: false);
+	}
+
+	/// <summary>
+	/// Lottie Gauge: an uploaded Lottie stands at the point of its animation the reading has reached, eased on a spring,
+	/// instead of looping, so an arc filling or a needle sweeping over its length becomes a gauge. Without one the face
+	/// draws a gauge of its own in the chosen style and the fan's two colours (see FacesGauge). A still picture sits
+	/// dimmed behind it.
+	/// </summary>
+	private void LottieGauge(FaceContext x, Image? bg)
+	{
+		Graphics g = x.G;
+		var (s, f, dt) = GlowStep(x, "Lottie Gauge");
+		// fans set up on the first version kept its white and pale blue, which were for the number, not a gauge
+		if (x.Fan.Color1 == "#ffffff" && x.Fan.Color2 == "#7fdcff")
+		{
+			(string c1, string c2) = DefaultColors("Lottie Gauge");
+			x = x with { C1 = Imaging.Hex(c1, Color.Cyan), C2 = Imaging.Hex(c2, Color.DeepPink) };
+		}
+		float warn = WarnStep(x, s, dt, out float dim);
+		if (warn > 0.002f)
+		{
+			// the sweep runs from a deep shade of the warning colour to the colour itself, so it stays rich rather than
+			// mixing the fan's own colours into a pale wash; then the whole light breathes darker and back
+			Color hot = Imaging.Hex(x.Fan.WarnColor, Color.FromArgb(255, 90, 60));
+			Color deep = Imaging.Mix(hot, Color.Black, 0.45);
+			Color c1 = Imaging.Mix(x.C1, deep, warn), c2 = Imaging.Mix(x.C2, hot, warn);
+			x = x with { C1 = Imaging.Mix(c1, Color.Black, dim), C2 = Imaging.Mix(c2, Color.Black, dim) };
+		}
+		Color now = Imaging.Mix(x.C1, x.C2, f);
+		if (bg != null && Lottie.GaugeTime(bg, f, out double at))
+		{
+			Imaging.DrawCover(g, bg, new RectangleF(0f, 0f, 400f, 400f), at);
+			using GraphicsPath number = FitText(x.Value, "Segoe UI", FontStyle.Bold, new RectangleF(120f, 160f, 160f, 64f));
+			for (int i = 3; i >= 1; i--)
+			{
+				using Pen glow = new Pen(Color.FromArgb(28, now), i * 5f) { LineJoin = LineJoin.Round };
+				g.DrawPath(glow, number);
+			}
+			g.FillPath(Brushes.White, number);
+			Small(g, x.Label, Color.FromArgb(190, 255, 255, 255), 248f, 13f, bold: true);
+			return;
+		}
+		if (bg != null)
+		{
+			Imaging.DrawCover(g, bg, new RectangleF(0f, 0f, 400f, 400f), x.T, 0.55f);
+		}
+		BuiltInGauge(x, s, f, dt, now, over: bg != null);
 	}
 
 	private void Blade(FaceContext x)

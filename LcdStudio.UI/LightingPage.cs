@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
+using System.Linq;
 using System.Windows.Forms;
 using LcdStudio.Core;
 
@@ -33,6 +35,22 @@ public sealed class LightingPage : Page
 	private readonly Caption _result;
 
 	private readonly List<EffectTile> _tiles = new List<EffectTile>();
+
+	private readonly Toggle _react;
+
+	private readonly Select _reactSensor;
+
+	private readonly TextField _reactLow;
+
+	private readonly TextField _reactHigh;
+
+	private readonly Caption _reactUnit;
+
+	private readonly ColorField _reactHot1;
+
+	private readonly ColorField _reactHot2;
+
+	private readonly Caption _reactState;
 
 	public override string Title => "Lighting";
 
@@ -151,7 +169,7 @@ public sealed class LightingPage : Page
 		formGrid.Add("Colour 2", _stripC2);
 		formGrid.AddWide(_stripState);
 		card.Controls.Add(formGrid);
-		AddCard("How it works", 530).Controls.Add(new Caption("Fan animations are uploaded to the fans once and then play on the fans themselves — they keep running with no CPU cost, even if LumaLi closes.\n\nThe screen's light strip is animated live by LumaLi (about 30 frames a second, very light). With Match the screen layout on, it takes its colours and movement from whatever the screen is showing, left to right; use Reverse direction if it runs the wrong way round.\n\nChanging speed, brightness or colours re-uploads the selected animation when you let go of the slider.", Theme.SubText)
+		AddCard("How it works", 530).Controls.Add(new Caption("Fan animations are uploaded to the fans once and then play on the fans themselves — they keep running with no CPU cost, even if LumaLi closes.\n\nThe screen's light strip is animated live by LumaLi (about 30 frames a second, very light). With Match the screen layout on, it takes its colours and movement from whatever the screen is showing, left to right; use Reverse direction if it runs the wrong way round.\n\nChanging speed, brightness or colours re-uploads the selected animation when you let go of the slider.\n\nFollow a reading warms the fan animation in four steps as the reading climbs, turning its colours toward the hot ones and quickening it. Each step is a new upload, at most one every 20 seconds.", Theme.SubText)
 		{
 			AutoSize = false,
 			Size = new Size(Theme.S(490f), Theme.S(170f))
@@ -171,6 +189,84 @@ public sealed class LightingPage : Page
 		{
 			AutoSize = false,
 			Size = new Size(Theme.S(900f), Theme.S(24f))
+		};
+		// following a reading: calm below the first level, hot at the second, in steps between
+		_react = new Toggle("Follow a reading", lighting.React);
+		_react.CheckedChanged += delegate
+		{
+			ReactChange(delegate(LightingSettings l)
+			{
+				l.React = _react.Checked;
+			});
+			Main.Toast(_react.Checked ? "The fan lights now warm up with the reading" : "The fan lights are back to their own colours");
+		};
+		_reactSensor = new Select(Sensors.Catalog.Select((SensorDef d) => d.Key), lighting.ReactSensor)
+		{
+			Width = Theme.S(220f),
+			Display = (string k) => Sensors.Def(k).Label + " (" + Sensors.Def(k).Unit + ")"
+		};
+		_reactSensor.SelectedIndexChanged += delegate
+		{
+			if (_reactSensor.SelectedItem != null)
+			{
+				ReactChange(delegate(LightingSettings l)
+				{
+					l.ReactSensor = _reactSensor.SelectedItem;
+				});
+			}
+		};
+		_reactLow = LevelField(lighting.ReactLow, delegate(LightingSettings l, float v)
+		{
+			l.ReactLow = v;
+		});
+		_reactHigh = LevelField(lighting.ReactHigh, delegate(LightingSettings l, float v)
+		{
+			l.ReactHigh = v;
+		});
+		_reactUnit = new Caption("", Theme.Faint, Theme.Small)
+		{
+			Margin = new Padding(Theme.S(2f), Theme.S(8f), Theme.S(10f), 0)
+		};
+		_reactHot1 = new ColorField(lighting.ReactHot1, 84);
+		_reactHot1.ColorChanged += delegate
+		{
+			ReactChange(delegate(LightingSettings l)
+			{
+				l.ReactHot1 = _reactHot1.Hex;
+			});
+		};
+		_reactHot2 = new ColorField(lighting.ReactHot2, 84);
+		_reactHot2.ColorChanged += delegate
+		{
+			ReactChange(delegate(LightingSettings l)
+			{
+				l.ReactHot2 = _reactHot2.Hex;
+			});
+		};
+		_reactState = new Caption("", Theme.SubText, Theme.Small)
+		{
+			Margin = new Padding(0, Theme.S(8f), 0, 0)
+		};
+		Caption Small(string s) => new Caption(s, Theme.SubText, Theme.Small)
+		{
+			Margin = new Padding(Theme.S(4f), Theme.S(8f), Theme.S(6f), 0)
+		};
+		Stack reactRow = new Stack(horizontal: true)
+		{
+			Controls =
+			{
+				(Control?)_react,
+				(Control?)_reactSensor,
+				(Control?)Small("calm below"),
+				(Control?)_reactLow,
+				(Control?)Small("hot at"),
+				(Control?)_reactHigh,
+				(Control?)_reactUnit,
+				(Control?)Small("hot colours"),
+				(Control?)_reactHot1,
+				(Control?)_reactHot2,
+				(Control?)_reactState
+			}
 		};
 		FlowLayoutPanel flowLayoutPanel = new FlowLayoutPanel
 		{
@@ -198,9 +294,48 @@ public sealed class LightingPage : Page
 						(Control?)_result
 					}
 				},
+				(Control?)reactRow,
 				(Control?)flowLayoutPanel
 			}
 		});
+	}
+
+	private void ReactChange(Action<LightingSettings> change)
+	{
+		lock (E.Settings)
+		{
+			change(E.Settings.Lighting);
+		}
+		E.LightingChanged();
+	}
+
+	/// <summary>A small number box for a level, taken when you press Enter or leave it, so typing never sends half a number.</summary>
+	private TextField LevelField(float value, Action<LightingSettings, float> apply)
+	{
+		TextField f = new TextField(value.ToString("0.##", CultureInfo.InvariantCulture), 52);
+		void Commit()
+		{
+			if (float.TryParse(f.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+			{
+				ReactChange(delegate(LightingSettings l)
+				{
+					apply(l, v);
+				});
+			}
+		}
+		f.Box.Leave += delegate
+		{
+			Commit();
+		};
+		f.Box.KeyDown += delegate(object? _, KeyEventArgs e)
+		{
+			if (e.KeyCode == Keys.Return)
+			{
+				Commit();
+				e.SuppressKeyPress = true;
+			}
+		};
+		return f;
 	}
 
 	private void StripChange(Action<EffectSettings> change)
@@ -238,6 +373,10 @@ public sealed class LightingPage : Page
 		_reverse.SetSilently(lighting.StripMatchReversed);
 		_stripEffect.SetSilently(lighting.StripEffect);
 		_fansOn.SetSilently(lighting.FansOn);
+		_react.SetSilently(lighting.React);
+		_reactSensor.SetSilently(lighting.ReactSensor);
+		_reactHot1.SetSilently(lighting.ReactHot1);
+		_reactHot2.SetSilently(lighting.ReactHot2);
 		foreach (EffectTile tile in _tiles)
 		{
 			tile.RefreshSelection();
@@ -260,5 +399,15 @@ public sealed class LightingPage : Page
 		_stripBright.Enabled = own || matching;
 		_follow.Enabled = !matching;
 		_reverse.Enabled = matching;
+		LightingSettings l = E.Settings.Lighting;
+		_reactUnit.Text = Sensors.Def(l.ReactSensor).Unit;
+		bool on = l.React;
+		_reactSensor.Enabled = _reactLow.Enabled = _reactHigh.Enabled = _reactHot1.Enabled = _reactHot2.Enabled = on;
+		float? now = E.Sensors.Get(l.ReactSensor);
+		string state = !on ? "" : $"now {(now.HasValue ? now.Value.ToString("0", CultureInfo.InvariantCulture) : "--")}{Sensors.Def(l.ReactSensor).Unit} · warmth {E.ReactStep}/{Lighting.ReactSteps}";
+		if (_reactState.Text != state)
+		{
+			_reactState.Text = state;
+		}
 	}
 }

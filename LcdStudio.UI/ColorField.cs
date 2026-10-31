@@ -44,16 +44,17 @@ public sealed class ColorField : Panel
 
 	public event EventHandler? ColorChanged;
 
-	public ColorField(string hex)
+	/// <param name="hexWidth">Width of the hex box; narrower where the field shares a row.</param>
+	public ColorField(string hex, int hexWidth = 130)
 	{
-		base.Size = new Size(Theme.S(170f), Theme.S(30f));
+		base.Size = new Size(Theme.S(38 + hexWidth), Theme.S(30f));
 		base.Margin = new Padding(0, 0, Theme.S(8f), Theme.S(4f));
 		BackColor = Theme.Card;
 		_swatch = new NavySwatch
 		{
 			Bounds = new Rectangle(0, 0, Theme.S(30f), Theme.S(30f))
 		};
-		_hex = new TextField(hex, 130)
+		_hex = new TextField(hex, hexWidth)
 		{
 			Location = new Point(Theme.S(38f), 0)
 		};

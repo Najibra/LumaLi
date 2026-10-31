@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -98,6 +98,19 @@ public static class Program
 			engine3.StartSensorsOnly();
 			Thread.Sleep(2500);
 			ScreenLayout layout = Templates.All().First((ScreenLayout l) => l.Name == a2[0]);
+			// --image <file>: the layout over a picture, GIF or Lottie animation instead of its own background
+			string? backdrop = args2.SkipWhile((string x) => x != "--image").Skip(1).FirstOrDefault();
+			if (backdrop != null)
+			{
+				layout.Background = "image";
+				layout.Image = Path.GetFullPath(backdrop);
+			}
+			// --gauge <file>: a Lottie following the CPU load (pin it with --pin cpu.load=..) in the middle of the layout
+			string? gauge = args2.SkipWhile((string x) => x != "--gauge").Skip(1).FirstOrDefault();
+			if (gauge != null)
+			{
+				layout.Widgets.Add(new Widget { Kind = WidgetKind.Image, Image = Path.GetFullPath(gauge), FollowsReading = true, Sensor = "cpu.load", X = 760, Y = 40, W = 400, H = 400 });
+			}
 			using ScreenRenderer screenRenderer = new ScreenRenderer(engine3.Sensors);
 			Directory.CreateDirectory(a2[1]);
 			// --pin cpu.load=95,gpu.temp=80 holds readings for the stills; --demo-history first fills two minutes of made-up history
@@ -176,6 +189,70 @@ public static class Program
 			File.WriteAllText(Path.Combine(a2[1], "cost.txt"), $"{stopwatch.Elapsed.TotalMilliseconds / 60.0:0.0} ms per frame");
 			return 0;
 		}
+		if (args2.Contains("--fps-test"))
+		{
+			// --fps-test <dir>: how fast the 8.8" screen really takes frames. Renders 60 real Lightbeam frames at three
+			// JPEG qualities first, then sends each set as fast as the screen accepts it for 8 s. Close LumaLi first.
+			string dir = args2.SkipWhile((string x) => x != "--fps-test").Skip(1).FirstOrDefault() ?? ".";
+			Directory.CreateDirectory(dir);
+			string log = Path.Combine(dir, "fps-test.txt");
+			File.WriteAllText(log, "");
+			void Note(string s)
+			{
+				File.AppendAllText(log, $"{DateTime.Now:HH:mm:ss} {s}{Environment.NewLine}");
+			}
+			UsbDeviceInfo screenInfo2 = WinUsb.Enumerate().FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen);
+			if (screenInfo2 == null)
+			{
+				Note("no 8.8\" screen found");
+				return 1;
+			}
+			using Engine engine4 = new Engine();
+			engine4.StartSensorsOnly();
+			Thread.Sleep(2000);
+			ScreenLayout beam = Templates.All().First((ScreenLayout l) => l.Name == "Lightbeam");
+			var sets = new List<(int Quality, List<byte[]> Frames)>();
+			using (ScreenRenderer renderer = new ScreenRenderer(engine4.Sensors))
+			{
+				foreach (int q in new[] { 90, 75, 60 })
+				{
+					var frames = new List<byte[]>();
+					for (int i = 0; i < 60; i++)
+					{
+						using Bitmap bmp = renderer.Render(beam, 40.0 + i / 30.0);
+						bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
+						frames.Add(Imaging.Jpeg(bmp, q));
+					}
+					sets.Add((q, frames));
+				}
+			}
+			using (LcdLink link2 = new LcdLink(screenInfo2))
+			{
+				link2.SendFrame(sets[0].Frames[0], 80);
+				Note("firmware " + link2.Firmware);
+				foreach (var (q, frames) in sets)
+				{
+					Stopwatch watch2 = Stopwatch.StartNew();
+					int sent = 0, maxBuffer = 0;
+					var gaps = new List<double>();
+					double last = 0;
+					while (watch2.Elapsed.TotalSeconds < 8.0)
+					{
+						link2.SendFrame(frames[sent % frames.Count], 80);
+						sent++;
+						maxBuffer = Math.Max(maxBuffer, link2.BufferLevel);
+						double now = watch2.Elapsed.TotalMilliseconds;
+						gaps.Add(now - last);
+						last = now;
+					}
+					gaps.Sort();
+					Note($"quality {q}: {sent / watch2.Elapsed.TotalSeconds:0.0} fps, frame {frames.Average((byte[] f) => f.Length) / 1024:0} KB, " +
+						$"gap median {gaps[gaps.Count / 2]:0.0} ms, 95th {gaps[(int)(gaps.Count * 0.95)]:0.0} ms, max buffer {maxBuffer}");
+				}
+			}
+			Note("done");
+			return 0;
+		}
 		if (args2.Contains("--clock-test"))
 		{
 			// --clock-test <dir>: tries the screen's built-in clock. Each step first shows its number on the screen, then
@@ -232,6 +309,58 @@ public static class Program
 			}
 			return 0;
 		}
+		if (args2.Contains("--render-strip"))
+		{
+			// --render-strip Aurora <file.png>: six seconds of the light strip at 30 fps, one row per frame from the top,
+			// each LED a 16 px square, with the strip's own default colours and speed
+			string[] a3 = args2.SkipWhile((string x) => x != "--render-strip").Skip(1).ToArray();
+			var es = new EffectSettings();
+			using var sheet = new Bitmap(60 * 16, 180 * 4);
+			for (int f = 0; f < 180; f++)
+			{
+				double at = 20.0 + f / 30.0;
+				var leds = StripScenes.Has(a3[0]) ? StripScenes.Frame(a3[0], es, 60, at) : Lighting.Frame(a3[0], es, 1, 60, at / Lighting.LoopSeconds(es.Speed) % 1.0);
+				for (int i = 0; i < 60; i++)
+				{
+					for (int y = 0; y < 4; y++)
+					{
+						for (int x = 0; x < 16; x++)
+						{
+							sheet.SetPixel(i * 16 + x, f * 4 + y, Color.FromArgb(leds[i].R, leds[i].G, leds[i].B));
+						}
+					}
+				}
+			}
+			sheet.Save(a3[1], ImageFormat.Png);
+			return 0;
+		}
+		if (args2.Contains("--render-fanloop"))
+		{
+			// --render-fanloop Aurora <file.png> [fans]: the loop the fans are sent, played twice from the top so a seam
+			// at the wrap would show, one row per frame and each LED a 12 px square; the frame count and time are in the name
+			string[] a3 = args2.SkipWhile((string x) => x != "--render-fanloop").Skip(1).ToArray();
+			int fans = a3.Length > 2 && int.TryParse(a3[2], out int given) ? given : 3;
+			// --warmth n: the loop as the fans get it n steps toward hot while following a reading (default hot colours)
+			int warmth = int.TryParse(args2.SkipWhile((string x) => x != "--warmth").Skip(1).FirstOrDefault(), out int wv) ? wv : 0;
+			var (frames, ticks) = Lighting.FanLoop(a3[0], Lighting.Warmed(Lighting.DefaultsFor(a3[0]), new LightingSettings(), warmth), fans);
+			using var sheet = new Bitmap(fans * 26 * 12, frames.Count * 2 * 6);
+			for (int f = 0; f < frames.Count * 2; f++)
+			{
+				var leds = frames[f % frames.Count];
+				for (int i = 0; i < leds.Length; i++)
+				{
+					for (int y = 0; y < 6; y++)
+					{
+						for (int x = 0; x < 12; x++)
+						{
+							sheet.SetPixel(i * 12 + x, f * 6 + y, Color.FromArgb(leds[i].R, leds[i].G, leds[i].B));
+						}
+					}
+				}
+			}
+			sheet.Save(a3[1].Replace(".png", $" {frames.Count}f {ticks}ms.png"), ImageFormat.Png);
+			return 0;
+		}
 		if (args2.Contains("--render-face"))
 		{
 			// --render-face Lightbeam <dir> --sensor gpu.load --values 30,30,80 --times 1,1.05,1.1: one still per time,
@@ -240,7 +369,11 @@ public static class Program
 			string Opt(string name, string fallback) => args2.SkipWhile((string x) => x != name).Skip(1).FirstOrDefault() ?? fallback;
 			var inv = System.Globalization.CultureInfo.InvariantCulture;
 			(string c1, string c2) = Faces.DefaultColors(a3[0]);
-			var fan = new FanScreen { Serial = "preview", Face = a3[0], Sensor = Opt("--sensor", "gpu.load"), Color1 = c1, Color2 = c2 };
+			// --background <file>: the picture, GIF or Lottie animation behind the face (all of it, for Image / GIF)
+			string? picture = args2.SkipWhile((string x) => x != "--background").Skip(1).FirstOrDefault();
+			var fan = new FanScreen { Serial = "preview", Face = a3[0], Sensor = Opt("--sensor", "gpu.load"), Color1 = c1, Color2 = c2, Background = picture == null ? null : Path.GetFullPath(picture), GaugeStyle = Opt("--style", "Arc"),
+				WarnAt = float.Parse(Opt("--warn", "0"), inv), WarnColor = Opt("--warn-color", "#ff5a3c") };
+			string stem = string.Concat(a3[0].Split(Path.GetInvalidFileNameChars()));
 			float[] values = Opt("--values", "42").Split(',').Select((string v) => float.Parse(v, inv)).ToArray();
 			string[] stamps = Opt("--times", "1").Split(',');
 			Directory.CreateDirectory(a3[1]);
@@ -248,7 +381,7 @@ public static class Program
 			for (int i = 0; i < stamps.Length; i++)
 			{
 				using Bitmap still = faces2.Render(fan, values[Math.Min(i, values.Length - 1)], double.Parse(stamps[i], inv));
-				still.Save(Path.Combine(a3[1], $"{a3[0]}-at-{stamps[i]}.png"), ImageFormat.Png);
+				still.Save(Path.Combine(a3[1], $"{stem}-at-{stamps[i]}.png"), ImageFormat.Png);
 			}
 			Stopwatch watch = Stopwatch.StartNew();
 			for (int k = 0; k < 60; k++)
@@ -381,6 +514,65 @@ public static class Program
 				list2.Add("ERROR " + ex6);
 			}
 			File.WriteAllLines(Path.Combine(path2, "lighting-size.txt"), list2);
+			return 0;
+		}
+		if (args2.Contains("--lighting-frames"))
+		{
+			// --lighting-frames <dir>: whether the fans take loops longer than 48 frames. For every group, uploads a
+			// rainbow spin of 48, 52, 64, 78, 96 frames and the most that fit its memory, and notes which the controller
+			// takes. Close LumaLi first; starting it again puts the chosen lighting back.
+			string dir = args2.SkipWhile((string a) => a != "--lighting-frames").Skip(1).FirstOrDefault() ?? ".";
+			Directory.CreateDirectory(dir);
+			var notes = new List<string>();
+			try
+			{
+				List<UsbDeviceInfo> found = WinUsb.Enumerate();
+				using WirelessHub hub = new WirelessHub(found.First((UsbDeviceInfo d) => d.Kind == DeviceKind.WirelessTx), found.First((UsbDeviceInfo d) => d.Kind == DeviceKind.WirelessRx));
+				EffectSettings es = Lighting.DefaultsFor("Rainbow spin");
+				foreach (FanGroup g in hub.Groups.Where((FanGroup x) => x.RgbSupported).ToList())
+				{
+					int most = 8192 / (g.Leds * 3);
+					notes.Add($"group {g.Id}: {g.FanCount} fans, {g.LedsPerFan} LEDs each, room for {most} frames");
+					foreach (int count in new[] { 48, 52, 64, 78, 96, most }.Where((int n) => n <= most).Distinct())
+					{
+						var frames = Enumerable.Range(0, count).Select((int f) => Lighting.Frame("Rainbow spin", es, g.FanCount, g.LedsPerFan, (double)f / count)).ToList();
+						bool taken = false;
+						byte[] sent = Array.Empty<byte>();
+						string error = "";
+						for (int attempt = 0; attempt < 3 && !taken; attempt++)
+						{
+							try
+							{
+								sent = hub.UploadLighting(g, frames, 6000 / count);
+							}
+							catch (Exception ex)
+							{
+								error = ex.Message;
+								break;
+							}
+							for (int k = 0; k < 6 && !taken; k++)
+							{
+								Thread.Sleep(250);
+								try
+								{
+									hub.Refresh();
+								}
+								catch (IOException)
+								{
+								}
+								taken = hub.Applied(g, sent);
+							}
+						}
+						notes.Add($"  {count} frames ({count * g.Leds * 3} bytes, {TinyUz.Encode(new byte[count * g.Leds * 3]).Length} packed-empty): {(taken ? "taken" : "NOT taken")} {error}");
+						File.WriteAllLines(Path.Combine(dir, "lighting-frames.txt"), notes);
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				notes.Add("ERROR " + ex);
+			}
+			File.WriteAllLines(Path.Combine(dir, "lighting-frames.txt"), notes);
 			return 0;
 		}
 		if (args2.Contains("--lighting-test"))

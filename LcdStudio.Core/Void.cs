@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.Linq;
+using SkiaSharp;
 
 namespace LcdStudio.Core;
 
@@ -85,6 +86,7 @@ public sealed partial class ScreenRenderer
 	private int _voidFocus;
 
 	private double _voidFocusSince = -10.0, _voidJumpAt = -10.0, _voidFocusAt = double.NaN;
+	private bool _voidStill;
 
 	private string _voidWhy = "SCAN";
 
@@ -147,6 +149,9 @@ public sealed partial class ScreenRenderer
 		{
 			return;
 		}
+		// a still or a preview drawn now and then rather than a running animation: a move of the scanner shows its
+		// reading whole, or the frame would catch the very start of the reveal and show the unit with no number
+		_voidStill = double.IsNaN(_voidFocusAt) || t < _voidFocusAt || t - _voidFocusAt > 0.5;
 		if (t < _voidFocusAt)
 		{
 			// the clock started again (a fresh preview): start the scanner afresh too
@@ -208,7 +213,7 @@ public sealed partial class ScreenRenderer
 	{
 		_voidFocus = index;
 		_voidWhy = why;
-		_voidFocusSince = t;
+		_voidFocusSince = _voidStill ? t - 1.0 : t;
 	}
 
 	private VoidState VoidStateOf(string key)
@@ -235,36 +240,49 @@ public sealed partial class ScreenRenderer
 		int tint = VoidWarn(focus) ? 7 : (int)Math.Round(Math.Pow(f, 1.5) * 6.0);
 		float bright = 0.55f + 0.35f * (float)f + 0.25f * (float)surge;
 		var corners = new[] { new PointF(0f, -1f), new PointF(0.866f, 0.5f), new PointF(-0.866f, 0.5f) };
-		for (int i = 0; i < VoidRings; i++)
+		// drawn by Skia: every dot placed between pixels, sized and lit smoothly rather than in steps, its light added
+		// to what is beneath, and faded in and out at the edges of the void instead of popping
+		Color glowTint = VoidTint(tint), coreTint = Imaging.Mix(glowTint, Color.White, 0.7);
+		SkiaDraw(g, new Rectangle(560, 0, 800, 480), c =>
 		{
-			float depth = i + ph;
-			float rad = VoidR0 * (float)Math.Pow(VoidQ, depth);
-			float near = depth / VoidRings;
-			float fade = i == 0 ? ph : 1f;
-			// a band of light runs outward along the rings
-			float wave = 0.75f + 0.25f * (float)Math.Sin(depth * 1.1 - t * 3.0);
-			float level = Math.Min(1f, fade * bright * wave * (0.45f + 0.55f * (float)Math.Pow(near, 0.5)));
-			int alpha = (int)Math.Round(level * 10f);
-			if (alpha <= 0)
+			using var halo = new SKPaint { BlendMode = SKBlendMode.Plus, ColorFilter = SKColorFilter.CreateBlendMode(SkiaKit.Sk(glowTint), SKBlendMode.Modulate) };
+			using var core = new SKPaint { BlendMode = SKBlendMode.Plus, ColorFilter = SKColorFilter.CreateBlendMode(SkiaKit.Sk(coreTint), SKBlendMode.Modulate) };
+			SKImage haloDot = VoidSprite(false), coreDot = VoidSprite(true);
+			for (int i = 0; i < VoidRings; i++)
 			{
-				continue;
-			}
-			Bitmap dot = VoidDot((int)Math.Round((1.6f + rad * 0.0068f) * 2f), alpha, tint);
-			for (int e = 0; e < 3; e++)
-			{
-				PointF a = corners[e], b = corners[(e + 1) % 3];
-				for (int k = 0; k < VoidPerEdge; k++)
+				float depth = i + ph;
+				float rad = VoidR0 * (float)Math.Pow(VoidQ, depth);
+				float near = depth / VoidRings;
+				float fade = i == 0 ? ph : 1f;
+				// a band of light runs outward along the rings
+				float wave = 0.75f + 0.25f * (float)Math.Sin(depth * 1.1 - t * 3.0);
+				float level = Math.Min(1f, fade * bright * wave * (0.45f + 0.55f * (float)Math.Pow(near, 0.5)));
+				if (level <= 0.005f)
 				{
-					float u = (k + 0.5f) / VoidPerEdge;
-					float x = VoidCx + rad * (a.X + (b.X - a.X) * u), y = VoidCy + rad * (a.Y + (b.Y - a.Y) * u);
-					if (x < 600f || x > 1320f || y < -10f || y > 490f)
+					continue;
+				}
+				float d = 1.6f + rad * 0.0068f, span = d * 1.4f;
+				for (int e = 0; e < 3; e++)
+				{
+					PointF a = corners[e], b = corners[(e + 1) % 3];
+					for (int k = 0; k < VoidPerEdge; k++)
 					{
-						continue;
+						float u = (k + 0.5f) / VoidPerEdge;
+						float x = VoidCx + rad * (a.X + (b.X - a.X) * u), y = VoidCy + rad * (a.Y + (b.Y - a.Y) * u);
+						float edge = Math.Clamp((x - 600f) / 40f, 0f, 1f) * Math.Clamp((1320f - x) / 40f, 0f, 1f);
+						if (edge <= 0f || y < -10f || y > 490f)
+						{
+							continue;
+						}
+						var box = new SKRect(x - span, y - span, x + span, y + span);
+						halo.Color = new SKColor(255, 255, 255, (byte)Math.Min(255f, 150f * level * edge));
+						c.DrawImage(haloDot, box, SkiaKit.Linear, halo);
+						core.Color = new SKColor(255, 255, 255, (byte)Math.Min(255f, (250f * level + 5f) * edge));
+						c.DrawImage(coreDot, box, SkiaKit.Linear, core);
 					}
-					g.DrawImageUnscaled(dot, (int)Math.Round(x - dot.Width / 2f), (int)Math.Round(y - dot.Height / 2f));
 				}
 			}
-		}
+		});
 		using var mouth = new Pen(Color.FromArgb((int)(60 + 120 * surge), VoidTint(tint)), 1f);
 		g.DrawPolygon(mouth, corners.Select(c => new PointF(VoidCx + VoidR0 * 0.97f * c.X, VoidCy + VoidR0 * 0.97f * c.Y)).ToArray());
 	}
@@ -529,6 +547,34 @@ public sealed partial class ScreenRenderer
 	private static Color VoidTint(int step) => Imaging.Mix(VoidIce, VoidPink, step / 7.0);
 
 	private static string Spaced(string s) => string.Join(" ", s.ToCharArray()).Replace("   ", "     ");
+
+	private static SKImage? _voidHalo, _voidCore;
+
+	/// <summary>
+	/// A white dot for Skia to tint, scale and fade: the soft halo, or the bright core, each filling a square whose
+	/// half-width is 1.4 times the dot's size.
+	/// </summary>
+	private static SKImage VoidSprite(bool core)
+	{
+		ref SKImage? slot = ref core ? ref _voidCore : ref _voidHalo;
+		if (slot == null)
+		{
+			using var surface = SKSurface.Create(new SKImageInfo(64, 64, SKColorType.Bgra8888, SKAlphaType.Premul));
+			SKCanvas c = surface.Canvas;
+			c.Clear(SKColors.Transparent);
+			// a dot of size 1 has its halo out to 1.1 and its core out to 0.45, on a square of half-width 1.4
+			float unit = 32f / 1.4f;
+			var colors = core
+				? new[] { SKColors.White, SKColors.White, new SKColor(255, 255, 255, 0) }
+				: new[] { new SKColor(255, 255, 255, 255), new SKColor(255, 255, 255, 170), new SKColor(255, 255, 255, 0) };
+			float[] stops = core ? new[] { 0f, 0.75f, 1f } : new[] { 0f, 0.55f, 1f };
+			using var shader = SKShader.CreateRadialGradient(new SKPoint(32f, 32f), unit * (core ? 0.5f : 1.25f), colors, stops, SKShaderTileMode.Clamp);
+			using var paint = new SKPaint { Shader = shader, IsAntialias = true };
+			c.DrawRect(new SKRect(0f, 0f, 64f, 64f), paint);
+			slot = surface.Snapshot();
+		}
+		return slot;
+	}
 
 	/// <summary>A glowing LED dot: a soft halo round a bright core, cached by size, brightness and tint.</summary>
 	private Bitmap VoidDot(int twice, int alpha, int tint)

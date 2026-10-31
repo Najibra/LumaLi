@@ -4,7 +4,7 @@
 
 **A lightweight, deeply customizable open-source app for the Lian Li Universal Screen 8.8", TL Wireless LCD fans and wireless fan lighting.**
 
-30+ animated live-sensor layouts · a drag-and-drop layout editor · 21 fan-screen faces · screen-synced lighting · fan curves.
+30+ animated live-sensor layouts · a drag-and-drop layout editor · 22 fan-screen faces · Lottie animations · lighting that reacts to your temperatures · fan curves.
 One small `.exe`, no installer, no account, no telemetry.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -35,12 +35,13 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 
 **Built to be customized.**
 
-- **A real layout editor** for the 1920×480 screen: drag, resize, snap, align, undo/redo, copy and paste. Widgets include text with live readings (`{cpu.load:0}%`, `{time:HH:mm}`, …), values, gauges, rings, bars, graphs, per-thread CPU bars, glass panels, images and GIFs.
+- **A real layout editor** for the 1920×480 screen: drag, resize, snap, align, undo/redo, copy and paste. Widgets include text with live readings (`{cpu.load:0}%`, `{time:HH:mm}`, …), values, gauges, rings, bars, graphs, per-thread CPU bars, glass panels, images, GIFs and Lottie animations (`.json` / `.lottie`). A Lottie can loop, or follow a reading so it scrubs with your CPU or GPU load.
 - **Backgrounds:** solid, gradient, aurora, neon grid, heat waves, tunnel, carved stone, your own image or GIF, or a video.
 - **30+ built-in templates** to start from. Built-ins are copied on your first change, so the originals are never lost; remove the ones you don't use and restore them any time.
 - **Export and import layouts** as `.json` to share them.
-- **21 fan-screen faces**, each with its own sensor, label, two colours, rotation and optional background image or GIF.
-- **Lighting:** 20 animated fan effects with their own speed, brightness and colours, and a light strip that can **match the screen layout** — the strip takes its colours and movement from whatever the screen is showing.
+- **22 fan-screen faces**, each with its own sensor, label, two colours, rotation and optional background image or GIF. The **Lottie Gauge** face has four built-in gauge styles (Arc, Needle, Liquid, LED ring) or takes your own Lottie, and can switch to a breathing warning colour above a level you set.
+- **Lighting:** 21 animated fan effects (including Aurora and Comet trail) with their own speed, brightness and colours, and a light strip that can **match the screen layout** — the strip takes its colours and movement from whatever the screen is showing.
+- **Reactive lighting:** the fans can follow a reading, such as GPU temperature, and warm from your colours toward amber and red in four gentle steps as it rises.
 - **Standby screen:** a calm face with your logo (or the LumaLi mark), a large clock and the date, shown when the PC is idle or locked and left on the screen as it sleeps, hibernates or shuts down (if your motherboard keeps USB powered).
 - **Cooling:** presets, an automatic curve that follows GPU or CPU temperature (with a fail-safe to 100 % if the sensor stops), per-group trim and fan calibration.
 
@@ -102,11 +103,11 @@ Settings, layouts and uploads are kept in `%APPDATA%\LumaLi`. CPU temperature ne
 dotnet publish LumaLi.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
 ```
 
-This gives a single `dist\LumaLi.exe`. `LumaLi.exe --test <folder>` runs 144 offline checks (protocol framing, every face, template and effect) and writes renders of each; `--render-layout <Name> <folder>` saves stills of any layout. Neither touches your devices.
+This gives a single `dist\LumaLi.exe`. `LumaLi.exe --test <folder>` runs 151 offline checks (protocol framing, every face, template and effect) and writes renders of each; `--render-layout <Name> <folder>` saves stills of any layout. Neither touches your devices.
 
 ## How it works
 
-LumaLi is a .NET 8 WinForms app. Screens are drawn with GDI+ and sent as JPEG frames; sensors come from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). The USB protocols are documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+LumaLi is a .NET 8 WinForms app. Screens are drawn with GDI+ and [SkiaSharp](https://github.com/mono/SkiaSharp) (glow, blur and Lottie through Skottie) and sent as JPEG frames at up to 30 fps; sensors come from [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor). The USB protocols are documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Support LumaLi
 
@@ -116,6 +117,7 @@ LumaLi is free and always will be. If it brightens up your build, you can suppor
 
 - Protocol research: [sgtaziz/lian-li-linux](https://github.com/sgtaziz/lian-li-linux) (MIT)
 - Compression for fan lighting: [sisong/tinyuz](https://github.com/sisong/tinyuz) (MIT)
+- Drawing and Lottie: [SkiaSharp and SkiaSharp.Skottie](https://github.com/mono/SkiaSharp) (MIT)
 - Sensors: [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0)
 
 See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

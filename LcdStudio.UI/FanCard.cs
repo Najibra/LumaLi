@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -27,6 +28,10 @@ internal sealed class FanCard : Card
 
 	private readonly Select _rotation;
 
+	private readonly Select _style;
+
+	private readonly Caption _styleLabel;
+
 	private readonly Select _background;
 
 	private readonly TextField _label;
@@ -40,6 +45,16 @@ internal sealed class FanCard : Card
 	private readonly Caption _c2Label;
 
 	private readonly Toggle _enabled;
+
+	private readonly Caption _warnLabel;
+
+	private readonly Stack _warnRow;
+
+	private readonly TextField _warnAt;
+
+	private readonly Caption _warnUnit;
+
+	private readonly ColorField _warnColor;
 
 	private bool _loading;
 
@@ -94,6 +109,7 @@ internal sealed class FanCard : Card
 				{
 					f.Sensor = _sensor.SelectedItem;
 				});
+				_warnUnit.Text = WarnUnit(_fan.Sensor);
 			}
 		};
 		_label = new TextField(_fan.Label, 210);
@@ -127,6 +143,69 @@ internal sealed class FanCard : Card
 				{
 					f.Color2 = _c2.Hex;
 				});
+			}
+		};
+		_style = new Select(Faces.GaugeStyles, _fan.GaugeStyle)
+		{
+			Width = Theme.S(130f)
+		};
+		_style.SelectedIndexChanged += delegate
+		{
+			if (!_loading && _style.SelectedItem != null)
+			{
+				Change(delegate(FanScreen f)
+				{
+					f.GaugeStyle = _style.SelectedItem;
+				});
+			}
+		};
+		_styleLabel = new Caption("Style", null, null, 90);
+		// the gauge turns this colour once the reading reaches the level; empty or 0 is off
+		_warnAt = new TextField(WarnText(_fan.WarnAt), 56);
+		_warnAt.Box.TextChanged += delegate
+		{
+			if (!_loading)
+			{
+				string t = _warnAt.Text.Trim();
+				if (t.Length == 0)
+				{
+					Change(delegate(FanScreen f)
+					{
+						f.WarnAt = 0f;
+					});
+				}
+				else if (float.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) && v >= 0f)
+				{
+					Change(delegate(FanScreen f)
+					{
+						f.WarnAt = v;
+					});
+				}
+			}
+		};
+		_warnUnit = new Caption("", Theme.Faint, Theme.Small)
+		{
+			Margin = new Padding(Theme.S(3f), Theme.S(8f), Theme.S(8f), 0)
+		};
+		_warnColor = new ColorField(_fan.WarnColor, 84);
+		_warnColor.ColorChanged += delegate
+		{
+			if (!_loading)
+			{
+				Change(delegate(FanScreen f)
+				{
+					f.WarnColor = _warnColor.Hex;
+				});
+			}
+		};
+		_warnLabel = new Caption("Warn at", null, null, 90);
+		_warnRow = new Stack(horizontal: true)
+		{
+			Controls =
+			{
+				(Control?)_warnAt,
+				(Control?)_warnUnit,
+				(Control?)_warnColor
 			}
 		};
 		_rotation = new Select(new string[4] { "0", "90", "180", "270" }, _fan.Rotation.ToString())
@@ -175,6 +254,11 @@ internal sealed class FanCard : Card
 		_c2Label = new Caption("", null, null, 90);
 		formGrid.Add("Face", _face);
 		formGrid.Add("Sensor", _sensor);
+		// the gauge's own look, for the Lottie Gauge face until a Lottie is uploaded
+		formGrid.Controls.Add(_styleLabel);
+		formGrid.Controls.Add(_style);
+		formGrid.Controls.Add(_warnLabel);
+		formGrid.Controls.Add(_warnRow);
 		formGrid.Add("Label", _label);
 		formGrid.Controls.Add(_c1Label);
 		formGrid.Controls.Add(_c1);
@@ -214,11 +298,21 @@ internal sealed class FanCard : Card
 		E.SaveSoon();
 	}
 
+	private static string WarnText(float v)
+	{
+		return v > 0f ? v.ToString("0.##", CultureInfo.InvariantCulture) : "";
+	}
+
+	private static string WarnUnit(string sensor)
+	{
+		return sensor == "time" ? "" : Sensors.Def(sensor).Unit;
+	}
+
 	private void Upload()
 	{
 		using OpenFileDialog openFileDialog = new OpenFileDialog
 		{
-			Filter = "Images and GIFs|*.png;*.jpg;*.jpeg;*.bmp;*.gif"
+			Filter = "Images, GIFs and Lottie animations|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie"
 		};
 		if (openFileDialog.ShowDialog(this) == DialogResult.OK)
 		{
@@ -247,6 +341,15 @@ internal sealed class FanCard : Card
 		_c1Label.Text = text;
 		_c2Label.Text = text2;
 		_rotation.SetSilently(_fan.Rotation.ToString());
+		_style.SetSilently(_fan.GaugeStyle);
+		_style.Visible = _styleLabel.Visible = _fan.Face == "Lottie Gauge";
+		_warnRow.Visible = _warnLabel.Visible = _fan.Face == "Lottie Gauge";
+		if (!float.TryParse(_warnAt.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float shown) || shown != _fan.WarnAt)
+		{
+			_warnAt.Text = WarnText(_fan.WarnAt);
+		}
+		_warnUnit.Text = WarnUnit(_fan.Sensor);
+		_warnColor.SetSilently(_fan.WarnColor);
 		_background.Items.Clear();
 		_background.Items.Add("");
 		try
@@ -254,7 +357,7 @@ internal sealed class FanCard : Card
 			if (Directory.Exists(Store.Uploads))
 			{
 				_background.Items.AddRange(from f in Directory.GetFiles(Store.Uploads)
-					where new string[5] { ".png", ".jpg", ".jpeg", ".bmp", ".gif" }.Contains(Path.GetExtension(f).ToLowerInvariant())
+					where new string[7] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".json", ".lottie" }.Contains(Path.GetExtension(f).ToLowerInvariant())
 					select f);
 			}
 		}

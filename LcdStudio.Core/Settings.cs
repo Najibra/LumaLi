@@ -26,7 +26,8 @@ public sealed class Settings
 
 	public bool Flip { get; set; }
 
-	public int ScreenFps { get; set; } = 20;
+	// the 8.8" screen takes about 32 frames a second, so 30 is the smoothest it can show with a little headroom
+	public int ScreenFps { get; set; } = 30;
 
 
 	public int ScreenQuality { get; set; } = 90;

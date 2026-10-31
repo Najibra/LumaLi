@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
+using SkiaSharp;
 
 namespace LcdStudio.Core;
 
@@ -265,38 +266,68 @@ public sealed partial class ScreenRenderer
 		st.Last = t;
 		st.Pulses.RemoveAll(s => DomeR0 + (t - s) * speed > reach);
 		Color blue = Imaging.Hex(w.Color2, Color.FromArgb(70, 140, 255));
-		foreach (double s in st.Pulses)
+		if (st.Pulses.Count == 0)
 		{
-			float rr = DomeR0 + (float)(t - s) * speed;
-			float fade = (float)Math.Pow(1f - (rr - DomeR0) / (reach - DomeR0), 1.4);
-			var box = new RectangleF(DomeX - rr, DomeY - rr, rr * 2f, rr * 2f);
-			using (var bloom = new Pen(Color.FromArgb((int)(40 * fade), blue), 44f))
-			{
-				g.DrawArc(bloom, box, 180f, 180f);
-			}
-			using (var wide = new Pen(Color.FromArgb((int)(90 * fade), Imaging.Mix(blue, Color.White, 0.2)), 18f))
-			{
-				g.DrawArc(wide, box, 180f, 180f);
-			}
-			using (var mid = new Pen(Color.FromArgb((int)(170 * fade), Imaging.Mix(blue, Color.White, 0.6)), 7f))
-			{
-				g.DrawArc(mid, box, 180f, 180f);
-			}
-			using (var line = new Pen(Color.FromArgb((int)(255 * fade), 248, 252, 255), 3f))
-			{
-				g.DrawArc(line, box, 180f, 180f);
-			}
-			// the ring the pulse is crossing flares
-			int ring = (int)Math.Round((rr - DomeR0) / DomeStep);
-			float near = 1f - Math.Abs(rr - (DomeR0 + ring * DomeStep)) / (DomeStep / 2f);
-			if (ring >= 0 && ring < DomeRings && near > 0f)
-			{
-				float rim = DomeR0 + ring * DomeStep;
-				using var flare = new Pen(Color.FromArgb((int)(200 * near * fade), 255, 255, 255), 2.4f);
-				g.DrawArc(flare, DomeX - rim, DomeY - rim, rim * 2f, rim * 2f, 180f, 180f);
-			}
+			return;
 		}
+		// drawn by Skia, as light added to the dome: each pulse's wide glow at a quarter size, truly blurred and laid on
+		// stretched, then its bright line and the flaring ring sharp over it
+		SkiaDraw(g, new Rectangle(0, 0, 1920, 480), c =>
+		{
+			_sonarGlow ??= SKSurface.Create(new SKImageInfo(480, 120, SKColorType.Bgra8888, SKAlphaType.Premul));
+			_sonarSoft ??= SKSurface.Create(new SKImageInfo(480, 120, SKColorType.Bgra8888, SKAlphaType.Premul));
+			SKCanvas q = _sonarGlow.Canvas;
+			q.Clear(SKColors.Transparent);
+			q.Save();
+			q.Scale(0.25f);
+			using (var wide = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 36f, BlendMode = SKBlendMode.Plus })
+			{
+				foreach (double s in st.Pulses)
+				{
+					float rr = DomeR0 + (float)(t - s) * speed;
+					float fade = (float)Math.Pow(1f - (rr - DomeR0) / (reach - DomeR0), 1.4);
+					wide.Color = SkiaKit.Sk(Imaging.Mix(blue, Color.White, 0.15), 0.62f * fade);
+					q.DrawArc(new SKRect(DomeX - rr, DomeY - rr, DomeX + rr, DomeY + rr), 180f, 180f, false, wide);
+				}
+			}
+			q.Restore();
+			using (SKImage glow = _sonarGlow.Snapshot())
+			using (var blur = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(3.5f, 3.5f) })
+			{
+				_sonarSoft.Canvas.Clear(SKColors.Transparent);
+				_sonarSoft.Canvas.DrawImage(glow, 0f, 0f, SkiaKit.Linear, blur);
+			}
+			using (SKImage soft = _sonarSoft.Snapshot())
+			using (SKPixmap pixels = _skDrawing!.PeekPixels())
+			{
+				SkiaKit.UpscaleAdd(soft, pixels);
+			}
+			using var mid = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 6f, BlendMode = SKBlendMode.Plus };
+			using var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2.2f, BlendMode = SKBlendMode.Plus };
+			using var flare = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2.4f, BlendMode = SKBlendMode.Plus, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 1.2f) };
+			foreach (double s in st.Pulses)
+			{
+				float rr = DomeR0 + (float)(t - s) * speed;
+				float fade = (float)Math.Pow(1f - (rr - DomeR0) / (reach - DomeR0), 1.4);
+				var box = new SKRect(DomeX - rr, DomeY - rr, DomeX + rr, DomeY + rr);
+				mid.Color = SkiaKit.Sk(Imaging.Mix(blue, Color.White, 0.6), 0.5f * fade);
+				c.DrawArc(box, 180f, 180f, false, mid);
+				line.Color = new SKColor(248, 252, 255, (byte)(235f * fade));
+				c.DrawArc(box, 180f, 180f, false, line);
+				// the ring the pulse is crossing flares
+				int ring = (int)Math.Round((rr - DomeR0) / DomeStep);
+				float near = 1f - Math.Abs(rr - (DomeR0 + ring * DomeStep)) / (DomeStep / 2f);
+				if (ring >= 0 && ring < DomeRings && near > 0f)
+				{
+					float rim = DomeR0 + ring * DomeStep;
+					flare.Color = new SKColor(255, 255, 255, (byte)(200f * near * fade));
+					c.DrawArc(new SKRect(DomeX - rim, DomeY - rim, DomeX + rim, DomeY + rim), 180f, 180f, false, flare);
+				}
+			}
+		});
 	}
+
+	private SKSurface? _sonarGlow, _sonarSoft;
 
 	// ---------- slab letters ----------
 

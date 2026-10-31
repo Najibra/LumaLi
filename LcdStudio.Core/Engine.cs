@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -436,8 +436,71 @@ public sealed class Engine : IDisposable
 		{
 			Settings.Lighting.Applied = true;
 		}
+		// the reading is looked at afresh, so a new sensor or level takes effect at once
+		_reactEase = double.NaN;
 		_lightingDirty = true;
 		SaveSoon();
+	}
+
+	/// <summary>How many steps toward hot the fan lights stand at while they follow a reading (0 = calm).</summary>
+	public int ReactStep => _reactStep;
+
+	private int _reactStep;
+
+	private double _reactEase = double.NaN;
+
+	private DateTime _reactAt = DateTime.MinValue;
+
+	/// <summary>The fewest seconds between two uploads the reading asks for, so the fans are never sent loop after loop.</summary>
+	private const double ReactGap = 20.0;
+
+	/// <summary>
+	/// Once a second while the fan lights follow a reading: the reading eased over several seconds, so a brief spike
+	/// does nothing, and the lights moved one step at a time toward it, only once it is well past the step's middle (so
+	/// it does not flicker between two) and at least ReactGap seconds after the last move. A step marks the lighting for
+	/// upload.
+	/// </summary>
+	private void ReactTick()
+	{
+		LightingSettings l = Settings.Lighting;
+		if (!l.React || !l.FansOn || !l.Applied)
+		{
+			if (_reactStep != 0)
+			{
+				_reactStep = 0;
+				_lightingDirty = true;
+			}
+			_reactEase = double.NaN;
+			return;
+		}
+		float? v = Sensors.Get(l.ReactSensor);
+		if (!v.HasValue)
+		{
+			return;
+		}
+		double share = Lighting.ReactShare(l, v.Value);
+		if (double.IsNaN(_reactEase))
+		{
+			// starting out, or after a change of settings: straight to where the reading stands
+			_reactEase = share;
+			int start = (int)Math.Round(share * Lighting.ReactSteps);
+			if (start != _reactStep)
+			{
+				_reactStep = start;
+				_reactAt = DateTime.Now;
+				_lightingDirty = true;
+			}
+			return;
+		}
+		_reactEase += (share - _reactEase) * 0.15;
+		double at = _reactEase * Lighting.ReactSteps;
+		int move = at > _reactStep + 0.6 ? 1 : at < _reactStep - 0.6 ? -1 : 0;
+		if (move != 0 && (DateTime.Now - _reactAt).TotalSeconds >= ReactGap)
+		{
+			_reactStep = Math.Clamp(_reactStep + move, 0, Lighting.ReactSteps);
+			_reactAt = DateTime.Now;
+			_lightingDirty = true;
+		}
 	}
 
 	public void SaveSoon()
@@ -495,6 +558,13 @@ public sealed class Engine : IDisposable
 			_lastSignature = text;
 			this.Changed?.Invoke();
 		}
+	}
+
+	/// <summary>Milliseconds a run of screen frames spent at each step, for the log.</summary>
+	private sealed class ScreenTiming
+	{
+		public double Render, Encode, Waited, Send, Slept;
+		public int Frames;
 	}
 
 	private static void Wait(CancellationToken ct, int ms, WaitHandle? wake = null)
@@ -572,6 +642,27 @@ public sealed class Engine : IDisposable
 		string text = null;
 		byte[] array = null;
 		DateTime dateTime = DateTime.MinValue;
+		// the screen takes about 30 ms to receive a frame over USB, so each frame goes on its way in the background while
+		// the next is drawn and encoded; done one after the other the two would hold the screen near 20 fps
+		Task? sending = null;
+		ScreenTiming timing = new ScreenTiming();
+		using PreciseWait? pause = PreciseWait.Create();
+		void Sent()
+		{
+			Task? s = sending;
+			sending = null;
+			s?.GetAwaiter().GetResult();
+		}
+		void Drain()
+		{
+			try
+			{
+				Sent();
+			}
+			catch
+			{
+			}
+		}
 		try
 		{
 			while (true)
@@ -579,6 +670,7 @@ public sealed class Engine : IDisposable
 				ct.ThrowIfCancellationRequested();
 				if (!Settings.ScreenOn)
 				{
+					Drain();
 					Screen.Running = false;
 					Screen.State = "off";
 					Screen.Fps = 0.0;
@@ -620,7 +712,9 @@ public sealed class Engine : IDisposable
 					}
 					else
 					{
+						long r0 = Stopwatch.GetTimestamp();
 						using Bitmap bitmap = screenRenderer.Render(screenLayout, Time);
+						long r1 = Stopwatch.GetTimestamp();
 						// the light strip, when it matches the screen, takes its colours from this frame as drawn
 						if (Settings.Lighting.StripMatchesScreen && Strip.Present)
 						{
@@ -628,11 +722,25 @@ public sealed class Engine : IDisposable
 						}
 						bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
 						array2 = Imaging.Jpeg(bitmap, Settings.ScreenQuality);
+						timing.Render += Stopwatch.GetElapsedTime(r0, r1).TotalMilliseconds;
+						timing.Encode += Stopwatch.GetElapsedTime(r1).TotalMilliseconds;
 					}
-					lcdLink.SendFrame(array2, brightness);
+					long w0 = Stopwatch.GetTimestamp();
+					Sent();
+					timing.Waited += Stopwatch.GetElapsedTime(w0).TotalMilliseconds;
+					LcdLink link = lcdLink;
+					byte[] frame = array2;
+					int level = brightness;
+					sending = Task.Run(() =>
+					{
+						long s0 = Stopwatch.GetTimestamp();
+						link.SendFrame(frame, level);
+						timing.Send += Stopwatch.GetElapsedTime(s0).TotalMilliseconds;
+					});
 					// going to sleep or shutting down: the standby face is on the screen; start its own clock if asked, then signal
 					if (_farewell && standby && !_farewellSent)
 					{
+						Sent();
 						if (Settings.Standby.FirmwareClock)
 						{
 							try
@@ -658,6 +766,7 @@ public sealed class Engine : IDisposable
 				}
 				catch (Exception ex) when (!(ex is OperationCanceledException))
 				{
+					Drain();
 					Screen.Running = false;
 					Screen.Fps = 0.0;
 					Screen.State = "error: " + Short(ex);
@@ -670,12 +779,29 @@ public sealed class Engine : IDisposable
 					continue;
 				}
 				// standby needs only a few frames a second
-				int num2 = 1000 / Math.Clamp(standby ? Math.Min(Settings.ScreenFps, 8) : Settings.ScreenFps, 1, 30);
-				Wait(ct, num2 - (int)(DateTime.UtcNow - utcNow).TotalMilliseconds);
+				double num2 = 1000.0 / Math.Clamp(standby ? Math.Min(Settings.ScreenFps, 8) : Settings.ScreenFps, 1, 30);
+				long z0 = Stopwatch.GetTimestamp();
+				double rest = num2 - (DateTime.UtcNow - utcNow).TotalMilliseconds;
+				if (pause != null)
+				{
+					pause.Wait(ct, rest);
+				}
+				else
+				{
+					Wait(ct, (int)rest);
+				}
+				timing.Slept += Stopwatch.GetElapsedTime(z0).TotalMilliseconds;
+				// every five minutes or so, where a frame's time goes, for when the screen falls short of its frame rate
+				if (++timing.Frames == 9000)
+				{
+					Log.Write($"screen timing per frame: render {timing.Render / 9000:0.0} ms, encode {timing.Encode / 9000:0.0}, waiting on USB {timing.Waited / 9000:0.0}, send {timing.Send / 9000:0.0}, sleep {timing.Slept / 9000:0.0}; {Screen.Fps:0.0} fps");
+					timing = new ScreenTiming();
+				}
 			}
 		}
 		finally
 		{
+			Drain();
 			// after a farewell the screen keeps the standby face (or its own clock): let go without stopping it
 			if (_farewellSent)
 			{
@@ -931,11 +1057,28 @@ public sealed class Engine : IDisposable
 		var shown = new float[StripLeds * 3];
 		FpsCounter fpsCounter = new FpsCounter();
 		AutoResetEvent autoResetEvent = NewWake();
+		// a steady 30 frames a second: each frame waits out what is left of its 33 ms, to the millisecond, where a plain
+		// wait would round up to the system's 15.6 ms tick and move the light in uneven steps
+		using PreciseWait? pause = PreciseWait.Create();
+		long started = 0;
+		void NextFrame()
+		{
+			double rest = 1000.0 / 30.0 - Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+			if (pause != null)
+			{
+				pause.Wait(ct, rest);
+			}
+			else
+			{
+				Wait(ct, (int)rest);
+			}
+		}
 		try
 		{
 			while (true)
 			{
 				ct.ThrowIfCancellationRequested();
+				started = Stopwatch.GetTimestamp();
 				LightingSettings lighting = Settings.Lighting;
 				try
 				{
@@ -949,7 +1092,8 @@ public sealed class Engine : IDisposable
 					{
 						bool flag = lighting.StripFollowsFans && lighting.FansOn;
 						text = ((!lighting.StripOn) ? "Off" : (flag ? lighting.FanEffect : lighting.StripEffect));
-						effectSettings = (flag ? lighting.For(lighting.FanEffect) : lighting.Strip);
+						// following the fans, the strip warms with them, step for step
+						effectSettings = (flag ? Lighting.Warmed(lighting.For(lighting.FanEffect), lighting, lighting.React ? _reactStep : 0) : lighting.Strip);
 					}
 					(byte R, byte G, byte B)[]? glow = _screenGlow;
 					if (lighting.StripOn && lighting.StripMatchesScreen && glow != null)
@@ -968,7 +1112,7 @@ public sealed class Engine : IDisposable
 						Strip.Running = true;
 						Strip.Fps = fpsCounter.Tick();
 						Strip.State = "matching the screen layout";
-						Wait(ct, 33, null);
+						NextFrame();
 						continue;
 					}
 					if (!Settings.Lighting.Applied)
@@ -978,11 +1122,18 @@ public sealed class Engine : IDisposable
 						continue;
 					}
 					double phase = Time / Lighting.LoopSeconds(effectSettings.Speed) % 1.0;
-					ledStrip.Send(Lighting.Frame(text, effectSettings, 1, 60, phase));
+					ledStrip.Send(StripScenes.Has(text) ? StripScenes.Frame(text, effectSettings, StripLeds, Time) : Lighting.Frame(text, effectSettings, 1, 60, phase));
 					Strip.Running = true;
 					Strip.Fps = fpsCounter.Tick();
 					Strip.State = ((text == "Off") ? "off" : (text ?? ""));
-					Wait(ct, Lighting.IsAnimated(text) ? 33 : 1000, Lighting.IsAnimated(text) ? null : autoResetEvent);
+					if (Lighting.IsAnimated(text))
+					{
+						NextFrame();
+					}
+					else
+					{
+						Wait(ct, 1000, autoResetEvent);
+					}
 				}
 				catch (Exception ex) when (!(ex is OperationCanceledException))
 				{
@@ -1046,6 +1197,7 @@ public sealed class Engine : IDisposable
 						}
 						lastGroupIds = text;
 					}
+					ReactTick();
 					if (_lightingDirty && Settings.Lighting.Applied)
 					{
 						_lightingDirty = false;
@@ -1106,14 +1258,9 @@ public sealed class Engine : IDisposable
 			LightingSettings lighting = Settings.Lighting;
 			text = (lighting.FansOn ? lighting.FanEffect : "Off");
 			EffectSettings effectSettings = lighting.For(lighting.FanEffect);
-			s = new EffectSettings
-			{
-				Speed = effectSettings.Speed,
-				Brightness = effectSettings.Brightness,
-				Color1 = effectSettings.Color1,
-				Color2 = effectSettings.Color2
-			};
+			s = Lighting.Warmed(effectSettings, lighting, lighting.React ? _reactStep : 0);
 		}
+		string warmth = Settings.Lighting.React && text != "Off" ? $" · warmth {_reactStep}/{Lighting.ReactSteps}" : "";
 		Stopwatch stopwatch = Stopwatch.StartNew();
 		List<FanGroup> list = hub.Groups.ToList();
 		string?[] status = new string[list.Count];
@@ -1178,7 +1325,7 @@ public sealed class Engine : IDisposable
 			status[key] = "not confirmed";
 		}
 		List<string> values = list.Select((FanGroup g, int gi) => GroupName(g, gi) + ": " + status[gi]).ToList();
-		LightingResult = text + " → " + string.Join(", ", values) + $" ({stopwatch.Elapsed.TotalSeconds:0.0} s)";
+		LightingResult = text + warmth + " → " + string.Join(", ", values) + $" ({stopwatch.Elapsed.TotalSeconds:0.0} s)";
 		Log.Write("lighting " + LightingResult);
 	}
 

@@ -77,6 +77,9 @@ public sealed class Widget
 
 	public bool Float { get; set; }
 
+	/// <summary>An image widget's Lottie plays as a gauge of <see cref="Sensor"/> between Min and Max instead of looping.</summary>
+	public bool FollowsReading { get; set; }
+
 	public Widget Clone()
 	{
 		return (Widget)MemberwiseClone();

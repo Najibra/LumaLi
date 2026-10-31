@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -19,7 +19,9 @@ public sealed partial class Faces
 {
 	private sealed class LightState
 	{
-		public double At = double.NaN, Lift, LiftV, Ring, RingV, Wave, Twist, Swell;
+		public double At = double.NaN, Lift, LiftV, Ring, RingV, Wave, Twist, Swell, Flow2, Flow3, Cable, Surge, Kick, KickV;
+
+		public float Last = float.NaN;
 
 		public string From = "", To = "";
 
@@ -34,7 +36,7 @@ public sealed partial class Faces
 
 	private readonly Dictionary<(char, float), float> _lightAdvance = new Dictionary<(char, float), float>();
 
-	private Bitmap? _lightGlow, _lightBloom, _lightPage;
+	private Bitmap? _lightPage;
 
 	private int _lightPageKey;
 
@@ -54,18 +56,33 @@ public sealed partial class Faces
 		// the arch and the rim follow the reading on critically damped springs: no jolt when it changes
 		LightSpring(ref s.Lift, ref s.LiftV, x.Fraction, 2.4, dt);
 		LightSpring(ref s.Ring, ref s.RingV, x.Fraction, 3.0, dt);
-		float lift = (float)Math.Clamp(s.Lift, 0.0, 1.0);
+		// a real jump in the reading sends a ripple through the strands, swelling in on a spring rather than snapping on;
+		// the small changes every reading makes each second are left alone, so the light never twitches
+		if (!float.IsNaN(s.Last) && Math.Abs(x.Fraction - s.Last) > 0.1f)
+		{
+			s.Surge = Math.Min(1.2, s.Surge + Math.Abs(x.Fraction - s.Last) * 3f);
+		}
+		s.Last = x.Fraction;
+		s.Surge *= Math.Exp(-dt * 1.4);
+		LightSpring(ref s.Kick, ref s.KickV, s.Surge, 3.5, dt);
+		float lift = (float)Math.Clamp(s.Lift, 0.0, 1.0), kick = (float)s.Kick;
 		s.Wave += dt * (0.5 + 2.2 * lift);
-		s.Twist += dt * (0.45 + 1.5 * lift);
-		s.Swell = (s.Swell + dt * (0.075 + 0.1 * lift)) % 1.0;
+		// the three flowing waves each keep their own pace, so their pattern never visibly repeats, and the rope's turn
+		// drifts in pace a little, as a rope eases and tightens: the same motion as the screen layout
 		double t = x.T;
+		s.Twist += dt * (0.22 + 0.5 * lift);
+		s.Flow2 += dt * (0.31 + 0.6 * lift);
+		s.Flow3 += dt * (0.5 + 0.9 * lift);
+		s.Cable += dt * (0.35 + 0.9 * lift) * (1.0 + 0.3 * Math.Sin(t * 0.17));
+		s.Swell = (s.Swell + dt * (0.075 + 0.1 * lift)) % 1.0;
 		float heat = Math.Clamp((lift - 0.75f) / 0.25f, 0f, 1f);
 		Color warm = Imaging.Mix(x.C1, Color.FromArgb(255, 150, 96), heat * 0.8);
 		Color flank = Imaging.Mix(x.C2, Color.FromArgb(214, 120, 150), heat * 0.5);
-		// the crest sits right over the number, so the strands arch clear of it on both sides
-		float cx = 200f + 10f * (float)Math.Sin(t * 0.11), arch = 128f + 46f * lift;
+		// the crest sits right over the number, so the strands arch high and clear of it on both sides
+		float cx = 200f + 10f * (float)Math.Sin(t * 0.11), arch = 150f + 60f * lift;
 		// the swell runs from well off the left to well off the right, so where it wraps round it touches nothing
-		float swellX = -240f + (float)s.Swell * 880f, twist = (float)s.Twist, wave = (float)s.Wave;
+		float swellX = -240f + (float)s.Swell * 880f, wave = (float)s.Wave;
+		float flow1 = (float)s.Twist, flow2 = (float)s.Flow2, flow3 = (float)s.Flow3, cable = (float)s.Cable, wind = (float)(t * 0.05);
 		float breathe = (float)Math.Sin(t * 0.29), reach = 1f + 0.2f * (float)Math.Sin(t * 0.21 + 1.3);
 		var A = new float[LightStrands];
 		var S = new float[LightStrands];
@@ -79,9 +96,10 @@ public sealed partial class Faces
 		{
 			float h1 = (float)Hash01(k * 17 + 3), h2 = (float)Hash01(k * 29 + 11), h3 = (float)Hash01(k * 41 + 5), h4 = (float)Hash01(k * 53 + 7);
 			A[k] = arch * (1f + 0.035f * (float)Math.Sin(t * 0.7 + k));
-			S[k] = h1 - 0.5f;
-			C[k] = cx + (h2 - 0.5f) * 20f;
-			L[k] = (130f + 170f * h3) * reach + 12f * (float)Math.Sin(t * 0.23 + k * 0.7);
+			// each strand's place across the bundle, in order with a little scatter, so neighbours move together
+			S[k] = (k + 0.5f) / LightStrands - 0.5f + (h1 - 0.5f) * 0.15f;
+			C[k] = cx + (h2 - 0.5f) * 30f;
+			L[k] = (150f + 190f * h3) * reach + 14f * (float)Math.Sin(t * 0.23 + k * 0.7);
 			R[k] = LightImpact - 4f + 8f * h4;
 			Amp[k] = 0.5f + 2f * h2;
 			Fq[k] = 0.014f + 0.016f * h3;
@@ -95,11 +113,22 @@ public sealed partial class Faces
 			// the swell lifts the beam and tears the fan open as it passes; the breathing opens and closes it
 			float sw = (px - swellX) / 70f, bump = (float)Math.Exp(-sw * sw);
 			float open = 1f + 0.45f * breathe + 1.7f * bump;
-			float height = A[k] * (0.93f + S[k] * 0.3f * open) + 26f * bump;
-			// the strands set round the bundle like the wires of a cable, turning as it runs
-			float radius = (1.5f + 50f * h * (1f - h)) * (1f + 1.4f * bump);
-			float turn = radius * (float)Math.Sin(k * 6.2832f / LightStrands + px * 0.024f - twist);
-			float weave = Amp[k] * 0.6f * (float)Math.Sin(px * Fq[k] - wave + Ph[k]);
+			// each strand wanders in and out along its length and over time, so they cross and part like filaments
+			float wander = 0.05f * (float)Math.Sin(px * 0.019f + k * 1.37f + t * 0.21) + 0.03f * (float)Math.Sin(px * 0.041f - k * 2.11f - t * 0.17);
+			float height = A[k] * (0.93f + S[k] * 0.3f * open) * (1f + wander) + 26f * bump;
+			// the flow, like strands of silk in a current: three slow waves of different lengths and speeds shifting
+			// gradually across the bundle, strongest on the flanks and still alive over the crest
+			float u = S[k] + 0.5f, env = (0.3f + 2.8f * h * (1f - h)) * (1f + 0.6f * bump);
+			float turn = env * 0.5f * (16f * (float)Math.Sin(px * 0.0144f + 5f * u - flow1)
+				+ 8f * (float)Math.Sin(px * 0.0275f - 9.5f * u + flow2 + 1.3f)
+				+ 3.2f * (float)Math.Sin(px * 0.057f + 19f * u - flow3 + 0.7f));
+			// and the rope over it: the strands laid round the bundle in order, the lay looser and tighter in stretches
+			// that wander along the beam, widest on the flanks and gathered in over the crest
+			float lay = px * 0.02f + 0.9f * (float)Math.Sin(px * 0.0068f + wind);
+			float strand = 0.65f + 0.25f * (Amp[k] - 0.5f) + 0.15f * (float)Math.Sin(t * 0.4 + k * 1.7);
+			float rope = (2.5f + 38f * h * (1f - h)) * (1f + 1.2f * bump) * strand;
+			turn += rope * (float)Math.Sin(u * 6.2832f + lay - cable);
+			float weave = Amp[k] * 0.6f * (float)Math.Sin(px * Fq[k] - wave + Ph[k]) + kick * 7f * (float)Math.Sin(px * 0.05f - t * 3.0 + k * 0.2);
 			return LightHy - height * h - h * (weave + turn) + (1f - h) * (k % 5 - 2) * 0.4f;
 		}
 		var strands = new PointF[LightStrands][];
@@ -115,111 +144,7 @@ public sealed partial class Faces
 		}
 		float flare = 0.6f + 0.35f * lift + 0.08f * (float)Math.Sin(t * 0.9);
 
-		// the page: near-black with a cold haze along the horizon and the floor falling to black, composed once per colour
-		if (_lightPage == null || _lightPageKey != x.C2.ToArgb())
-		{
-			_lightPage?.Dispose();
-			_lightPage = LightPage(x.C2);
-			_lightPageKey = x.C2.ToArgb();
-		}
-		CompositingMode mode = g.CompositingMode;
-		g.CompositingMode = CompositingMode.SourceCopy;
-		g.DrawImageUnscaled(_lightPage, 0, 0);
-		g.CompositingMode = mode;
-
-		// the soft light at a quarter size: warm smoke behind the crest, the strands wide and faint, and the landing
-		_lightGlow ??= new Bitmap(100, 100, PixelFormat.Format32bppPArgb);
-		_lightBloom ??= new Bitmap(25, 25, PixelFormat.Format32bppPArgb);
-		using (Graphics gg = Graphics.FromImage(_lightGlow))
-		{
-			gg.Clear(Color.Transparent);
-			gg.ScaleTransform(0.25f, 0.25f);
-			gg.SmoothingMode = SmoothingMode.AntiAlias;
-			using (var smoke = new GraphicsPath())
-			{
-				smoke.AddEllipse(cx - 150f, LightHy - arch * 0.8f - 80f, 300f, 160f);
-				using var sb = new PathGradientBrush(smoke) { CenterColor = Color.FromArgb(110, Imaging.Mix(warm, Color.Black, 0.6)), SurroundColors = new[] { Color.FromArgb(0, warm) } };
-				gg.FillPath(sb, smoke);
-			}
-			using (LinearGradientBrush faint = LightBrush(cx, warm, flank, 26))
-			using (var pen = new Pen(faint, 9f))
-			{
-				foreach (PointF[] pts in strands)
-				{
-					gg.DrawLines(pen, pts);
-				}
-			}
-			using var spot = new SolidBrush(Color.FromArgb((int)Math.Min(255f, 90f * flare), 230, 236, 255));
-			gg.FillEllipse(spot, LightImpact - 30f, LightHy - 8f, 80f, 16f);
-		}
-		using (Graphics gb = Graphics.FromImage(_lightBloom))
-		{
-			gb.Clear(Color.Transparent);
-			gb.InterpolationMode = InterpolationMode.HighQualityBilinear;
-			gb.DrawImage(_lightGlow, new Rectangle(0, 0, 25, 25));
-		}
-		InterpolationMode interp = g.InterpolationMode;
-		PixelOffsetMode offset = g.PixelOffsetMode;
-		g.InterpolationMode = InterpolationMode.Bilinear;
-		g.PixelOffsetMode = PixelOffsetMode.Half;
-		// mirrored in the floor, squashed and dim, fading toward the foot
-		GraphicsState floor = g.Save();
-		g.SetClip(new RectangleF(0f, LightHy + 1f, 400f, 400f - LightHy));
-		PointF[] mirror = { new PointF(0f, LightHy * 1.5f), new PointF(400f, LightHy * 1.5f), new PointF(0f, LightHy - (400f - LightHy) * 0.5f) };
-		LightBlit(g, _lightBloom, mirror, 0.7f);
-		LightBlit(g, _lightGlow, mirror, 0.55f);
-		using (var fade = new LinearGradientBrush(new PointF(0f, LightHy), new PointF(0f, 401f), Color.FromArgb(0, 1, 2, 5), Color.FromArgb(215, 1, 2, 5)))
-		{
-			g.FillRectangle(fade, 0f, LightHy + 1f, 400f, 400f - LightHy);
-		}
-		g.Restore(floor);
-		PointF[] whole = { new PointF(0f, 0f), new PointF(400f, 0f), new PointF(0f, 400f) };
-		LightBlit(g, _lightBloom, whole, 1f);
-		LightBlit(g, _lightGlow, whole, 1f);
-		g.InterpolationMode = interp;
-		g.PixelOffsetMode = offset;
-
-		// the sharp strands in three weights, each shimmering on its own slow beat
-		for (int tier = 0; tier < 3; tier++)
-		{
-			float shimmer = 0.85f + 0.15f * (float)Math.Sin(t * 1.1 + tier * 2.1);
-			using LinearGradientBrush b = LightBrush(cx, warm, flank, (int)(new[] { 80, 150, 235 }[tier] * shimmer));
-			using var pen = new Pen(b, tier == 2 ? 1.3f : 1f);
-			for (int k = tier; k < LightStrands; k += 3)
-			{
-				g.DrawLines(pen, strands[k]);
-			}
-		}
-		// the horizon, brightening to the landing and burning on to the edge, and the landing flare breathing on it
-		using (var line = new LinearGradientBrush(new PointF(-1f, 0f), new PointF(401f, 0f), Color.Black, Color.Black))
-		{
-			line.InterpolationColors = new ColorBlend
-			{
-				Colors = new[] { Color.FromArgb(40, flank), Color.FromArgb(110, flank), Color.FromArgb(255, 240, 244, 255), Color.FromArgb(200, Imaging.Mix(flank, Color.White, 0.6)) },
-				Positions = new[] { 0f, 0.5f, LightImpact / 402f, 1f }
-			};
-			using var pen = new Pen(line, 1.2f);
-			g.DrawLine(pen, 0f, LightHy, 400f, LightHy);
-		}
-		LightFlare(g, new RectangleF(LightImpact - 70f, LightHy - 20f, 140f, 40f), Color.FromArgb(150, 170, 255), 120f * flare);
-		LightFlare(g, new RectangleF(LightImpact - 150f, LightHy - 3f, 300f, 6f), Color.FromArgb(220, 230, 255), 190f * flare);
-		LightFlare(g, new RectangleF(LightImpact - 24f, LightHy - 6f, 48f, 12f), Color.White, 240f * flare);
-		// embers lifting off the crest, more under load, each born and dying at nothing so the drift loops without a seam
-		for (int i = 0; i < 16; i++)
-		{
-			float share = Math.Clamp(3f + 13f * lift - i, 0f, 1f);
-			if (share <= 0f)
-			{
-				continue;
-			}
-			float e1 = (float)Hash01(i * 13 + 1), e2 = (float)Hash01(i * 19 + 2), e3 = (float)Hash01(i * 23 + 3);
-			float life = (float)((t * (0.16 + 0.12 * e1) + e2) % 1.0);
-			float x0 = cx + (e3 - 0.5f) * 170f;
-			float ex = x0 + (e1 - 0.5f) * 20f * life, ey = Y(i % LightStrands, x0) - 22f * life * (0.5f + e2);
-			float size = 1.2f + 1.6f * e1;
-			using var ember = new SolidBrush(Color.FromArgb((int)(share * Math.Sin(Math.PI * life) * (110f + 120f * lift)), Imaging.Mix(warm, Color.White, 0.3)));
-			g.FillEllipse(ember, ex - size / 2f, ey - size / 2f, size, size);
-		}
+		LightSkia(g, Y, strands, cx, arch, lift, flare, warm, flank, t, x.C2);
 		// the reading's share as a hairline round the rim
 		using (var track = new Pen(Color.FromArgb(30, 255, 255, 255), 2f))
 		{
@@ -344,37 +269,6 @@ public sealed partial class Faces
 			i--;
 		}
 		return (value.Substring(0, i), value.Substring(i));
-	}
-
-	/// <summary>The strands' colour across the face: cool flanks, warm over the crest, white-hot at the landing.</summary>
-	private static LinearGradientBrush LightBrush(float cx, Color warm, Color flank, int alpha)
-	{
-		var b = new LinearGradientBrush(new PointF(-11f, 0f), new PointF(411f, 0f), Color.Black, Color.Black);
-		float P(float px) => Math.Clamp((px + 11f) / 422f, 0.001f, 0.999f);
-		Color Ac(Color c, float m) => Color.FromArgb(Math.Clamp((int)(alpha * m), 0, 255), c);
-		Color white = Color.FromArgb(236, 240, 255);
-		b.InterpolationColors = new ColorBlend
-		{
-			Colors = new[] { Ac(flank, 0.35f), Ac(flank, 0.8f), Ac(warm, 1f), Ac(Imaging.Mix(warm, flank, 0.55), 0.85f), Ac(Imaging.Mix(flank, white, 0.5), 0.8f), Ac(white, 1f), Ac(Imaging.Mix(flank, white, 0.6), 0.75f) },
-			Positions = new[] { 0f, P(cx - 110f), P(cx), P(cx + 70f), P(LightImpact - 40f), P(LightImpact), 1f }
-		};
-		return b;
-	}
-
-	private static void LightBlit(Graphics g, Bitmap bmp, PointF[] dest, float alpha)
-	{
-		using var ia = new ImageAttributes();
-		ia.SetWrapMode(WrapMode.TileFlipXY);
-		ia.SetColorMatrix(new ColorMatrix { Matrix33 = Math.Clamp(alpha, 0f, 1f) });
-		g.DrawImage(bmp, dest, new RectangleF(0f, 0f, bmp.Width, bmp.Height), GraphicsUnit.Pixel, ia);
-	}
-
-	private static void LightFlare(Graphics g, RectangleF r, Color c, float alpha)
-	{
-		using var p = new GraphicsPath();
-		p.AddEllipse(r);
-		using var b = new PathGradientBrush(p) { CenterColor = Color.FromArgb((int)Math.Clamp(alpha, 0f, 255f), c), SurroundColors = new[] { Color.FromArgb(0, c) } };
-		g.FillPath(b, p);
 	}
 
 	private static Bitmap LightPage(Color flank)

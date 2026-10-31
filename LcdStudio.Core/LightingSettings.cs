@@ -39,6 +39,22 @@ public sealed class LightingSettings
 	};
 
 
+	/// <summary>
+	/// The fan lights follow a reading: calm in the effect's own colours and pace below ReactLow, turning step by step
+	/// toward the hot colours and a quicker pace as the reading climbs to ReactHigh.
+	/// </summary>
+	public bool React { get; set; }
+
+	public string ReactSensor { get; set; } = "gpu.temp";
+
+	public float ReactLow { get; set; } = 45f;
+
+	public float ReactHigh { get; set; } = 80f;
+
+	public string ReactHot1 { get; set; } = "#ffb21e";
+
+	public string ReactHot2 { get; set; } = "#ff1f4b";
+
 	public EffectSettings For(string effect)
 	{
 		if (!Effects.TryGetValue(effect, out EffectSettings value))

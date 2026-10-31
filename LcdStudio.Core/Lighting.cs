@@ -8,17 +8,18 @@ namespace LcdStudio.Core;
 
 public static class Lighting
 {
-	public static readonly string[] Effects = new string[20]
+	public static readonly string[] Effects = new string[22]
 	{
 		"Static", "Breathing", "Breathing gradient", "Rainbow spin", "Rainbow wave", "Colour cycle", "Comets", "Propeller", "Relay", "Fire",
-		"Heartbeat", "Tide", "Lava lamp", "Thunderstorm", "Pendulum", "Ripple", "Tunnel spiral", "Fireflies", "Candy", "Off"
+		"Heartbeat", "Tide", "Lava lamp", "Thunderstorm", "Pendulum", "Ripple", "Tunnel spiral", "Fireflies", "Candy", "Aurora",
+		"Comet trail", "Off"
 	};
 
 	public static readonly string[] StripEffects = Effects.Where(delegate(string e)
 	{
 		bool flag = ((e == "Propeller" || e == "Relay") ? true : false);
 		return !flag;
-	}).Prepend("Rainbow").Distinct()
+	}).Where((string e) => e != "Off").Prepend("Rainbow").Concat(StripScenes.Names).Append("Off").Distinct()
 		.ToArray();
 
 	public const int MaxLoopBytes = 8192;
@@ -64,6 +65,12 @@ public static class Lighting
 				Color2 = "#00ff9c",
 				Speed = 35
 			}, 
+			"Aurora" => new EffectSettings
+			{
+				Color1 = "#3affc8",
+				Color2 = "#7a3cff",
+				Speed = 35
+			},
 			"Static" => new EffectSettings
 			{
 				Color1 = "#3fa9ff",
@@ -182,9 +189,93 @@ public static class Lighting
 				return c2;
 			}
 			return c1;
+		case "Aurora":
+			return AuroraRing(ring, pos, phase, c1, c2);
+		case "Comet trail":
+			return CometRing(ring, pos, phase, c1, c2);
 		default:
 			return c1;
 		}
+	}
+
+	/// <summary>How far apart two places around a ring are, either way round, as a share of the ring (0 to 0.5).</summary>
+	private static double Apart(double a, double b)
+	{
+		double d = Wrap(a - b);
+		return Math.Min(d, 1.0 - d);
+	}
+
+	private static Color Light(double r, double g, double b)
+	{
+		return Color.FromArgb((int)Math.Clamp(r, 0.0, 255.0), (int)Math.Clamp(g, 0.0, 255.0), (int)Math.Clamp(b, 0.0, 255.0));
+	}
+
+	/// <summary>The colour pushed further from grey, as LEDs wash colours out.</summary>
+	private static Color Vivid(Color c, double by)
+	{
+		double grey = (c.R + c.G + c.B) / 3.0;
+		return Light(grey + (c.R - grey) * by, grey + (c.G - grey) * by, grey + (c.B - grey) * by);
+	}
+
+	/// <summary>
+	/// The fans' Aurora: three wide, soft curtains of light on each ring, two of the first colour and one of the second,
+	/// swaying a little back and forth and gently swelling, each drifting only slightly in tint, over a faint glow of the
+	/// second colour. The fans hold only a few dozen frames, so the loop is kept short and each frame changes very little,
+	/// many small steps rather than a few large ones. Where curtains overlap their colours are blended, not added, so the
+	/// colour stays deep instead of washing toward white. Every change is once a loop, so it flows on without a seam.
+	/// </summary>
+	private static Color AuroraRing(int ring, double pos, double phase, Color c1, Color c2)
+	{
+		double[] tints = { 0.08, 0.92, 0.3 };
+		double weight = 0.0, light = 0.0, r = 0.0, g = 0.0, b = 0.0;
+		for (int i = 0; i < 3; i++)
+		{
+			double centre = Wrap(i / 3.0 + ring * 0.29 + 0.05 * Math.Sin(Math.PI * 2.0 * (phase + i / 3.0 + ring * 0.13)));
+			double d = Apart(pos, centre) / 0.17;
+			double swell = 0.75 + 0.25 * (0.5 + 0.5 * Math.Sin(Math.PI * 2.0 * (phase + i * 0.33 + ring * 0.2)));
+			Color tint = Vivid(Lerp(c1, c2, Math.Clamp(tints[i] + 0.12 * Math.Sin(Math.PI * 2.0 * (phase + i / 3.0)), 0.0, 1.0)), 1.45);
+			double a = Math.Exp(0.0 - d * d) * swell;
+			r += tint.R * a;
+			g += tint.G * a;
+			b += tint.B * a;
+			weight += a;
+			light = Math.Max(light, a) + Math.Min(light, a) * 0.35;
+		}
+		// the hue is the curtains' blend and the level their strongest with a little of the rest; between them a faint
+		// glow of the second colour, so the ring is never quite dark
+		Color glow = Vivid(c2, 1.45);
+		double level = Math.Min(1.0, light), floor = 0.07 * (1.0 - level);
+		weight = Math.Max(weight, 1e-6);
+		return Light(r / weight * level + glow.R * floor, g / weight * level + glow.G * floor, b / weight * level + glow.B * floor);
+	}
+
+	/// <summary>
+	/// The fans' Comet trail: one comet round each ring, a big white-hot head in a glow of the first colour, trailing a
+	/// full tail that turns into the second colour as it fades; each ring's comet a quarter turn on from the last, so
+	/// they chase across the fans. The head is wide and soft, lighting the LEDs either side of it in proportion, so it
+	/// glides between them rather than hopping.
+	/// </summary>
+	private static Color CometRing(int ring, double pos, double phase, Color c1, Color c2)
+	{
+		Color bold = Vivid(c1, 1.25), end = Vivid(c2, 1.25), hot = Lerp(bold, Color.White, 0.65);
+		double head = Wrap(phase + ring * 0.25);
+		double behind = Wrap(head - pos);
+		double r = 0.0, g = 0.0, b = 0.0;
+		const double length = 0.55;
+		if (behind < length)
+		{
+			double u = behind / length, tail = Math.Pow(1.0 - u, 1.6);
+			Color tc = Lerp(bold, end, Math.Min(1.0, u * 1.3));
+			r += tc.R * tail;
+			g += tc.G * tail;
+			b += tc.B * tail;
+		}
+		double h = Apart(pos, head) / 0.05, halo = Apart(pos, head) / 0.11;
+		double core = Math.Exp(0.0 - h * h), wide = Math.Exp(0.0 - halo * halo) * 0.55;
+		r += hot.R * core + bold.R * wide;
+		g += hot.G * core + bold.G * wide;
+		b += hot.B * core + bold.B * wide;
+		return Light(r, g, b);
 	}
 
 	private static Color Scale(Color c, double f)
@@ -285,6 +376,82 @@ public static class Lighting
 		return leds;
 	}
 
+	/// <summary>How many steps the fan lights take from calm to hot when they follow a reading (each step is one upload).</summary>
+	public const int ReactSteps = 4;
+
+	/// <summary>Where a reading sits between the lighting's calm and hot levels, 0 to 1.</summary>
+	public static double ReactShare(LightingSettings l, float v)
+	{
+		return Math.Clamp((v - l.ReactLow) / Math.Max(0.001, l.ReactHigh - l.ReactLow), 0.0, 1.0);
+	}
+
+	/// <summary>
+	/// The effect's settings warmed by so many steps toward the hot colours: each colour turns round the colour wheel
+	/// the short way to its hot one (cyan through green and yellow to amber, violet through magenta to red), so it stays
+	/// vivid all the way instead of passing through grey, and the pace quickens. Brightness is left alone. Effects that
+	/// make their own colours (the rainbows) only quicken.
+	/// </summary>
+	public static EffectSettings Warmed(EffectSettings s, LightingSettings l, int step)
+	{
+		double k = Math.Clamp(step / (double)ReactSteps, 0.0, 1.0);
+		var w = new EffectSettings { Speed = s.Speed, Brightness = s.Brightness, Color1 = s.Color1, Color2 = s.Color2 };
+		if (k <= 0.0)
+		{
+			return w;
+		}
+		w.Color1 = Imaging.Hex(HueMix(Imaging.Hex(s.Color1, Color.DeepSkyBlue), Imaging.Hex(l.ReactHot1, Color.Orange), k));
+		w.Color2 = Imaging.Hex(HueMix(Imaging.Hex(s.Color2, Color.HotPink), Imaging.Hex(l.ReactHot2, Color.Red), k));
+		w.Speed = (int)Math.Round(s.Speed + (Math.Min(100, s.Speed + 40) - s.Speed) * k);
+		return w;
+	}
+
+	/// <summary>Between two colours by hue (the short way round), saturation and value, rather than by mixing red, green and blue.</summary>
+	public static Color HueMix(Color a, Color b, double k)
+	{
+		if (k <= 0.0)
+		{
+			return a;
+		}
+		if (k >= 1.0)
+		{
+			return b;
+		}
+		var (ha, sa, va) = Hsv(a);
+		var (hb, sb, vb) = Hsv(b);
+		// a near-grey colour has no real hue, so it takes the other's
+		if (sa < 0.08)
+		{
+			ha = hb;
+		}
+		if (sb < 0.08)
+		{
+			hb = ha;
+		}
+		double d = hb - ha;
+		if (d > 0.5)
+		{
+			d -= 1.0;
+		}
+		else if (d < -0.5)
+		{
+			d += 1.0;
+		}
+		return Imaging.Hue(ha + d * k, sa + (sb - sa) * k, va + (vb - va) * k);
+	}
+
+	private static (double H, double S, double V) Hsv(Color c)
+	{
+		double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+		double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+		double h = 0.0;
+		if (d > 1e-9)
+		{
+			h = max == r ? (g - b) / d % 6.0 : max == g ? (b - r) / d + 2.0 : (r - g) / d + 4.0;
+			h = (h / 6.0 % 1.0 + 1.0) % 1.0;
+		}
+		return (h, max <= 0.0 ? 0.0 : d / max, max);
+	}
+
 	public static bool IsAnimated(string effect)
 	{
 		bool flag = ((effect == "Static" || effect == "Off") ? true : false);
@@ -296,16 +463,44 @@ public static class Lighting
 		return 8.0 - (double)Math.Clamp(speed, 0, 100) / 100.0 * 6.8;
 	}
 
+	/// <summary>
+	/// How many frames a fan loop gets, at most the most that fit. Effects with a sharp head or blade that goes once round
+	/// the ring per loop get a count that moves it the same whole number of LEDs every frame (or one LED every so many
+	/// frames): with any other count it would advance one LED, then two, then one, and turn in a visible limp.
+	/// </summary>
+	private static int Steps(string effect, int perRing, int most)
+	{
+		// (Comet trail's head is soft, lighting the LEDs either side of it in proportion, so it glides on more frames instead)
+		bool sweeps = effect == "Comets" || effect == "Propeller";
+		if (!sweeps || perRing <= 0)
+		{
+			return most;
+		}
+		for (int f = most; f >= 2; f--)
+		{
+			if (f % perRing == 0 || perRing % f == 0)
+			{
+				return f;
+			}
+		}
+		return most;
+	}
+
 	public static (List<(byte R, byte G, byte B)[]> Frames, int Ticks) FanLoop(string effect, EffectSettings s, int fans, int perRing = 26)
 	{
 		int num = fans * perRing;
-		int num2 = ((!IsAnimated(effect)) ? 1 : Math.Clamp(8192 / (num * 3), 2, 48));
+		// as many frames as the group's memory holds, up to 52: the controller was seen to take 52 (two fans' worth), and
+		// more has not been tried
+		int num2 = ((!IsAnimated(effect)) ? 1 : Steps(effect, perRing, Math.Clamp(8192 / (num * 3), 2, 52)));
 		List<(byte, byte, byte)[]> list = new List<(byte, byte, byte)[]>(num2);
 		for (int i = 0; i < num2; i++)
 		{
 			list.Add(Frame(effect, s, fans, perRing, (double)i / (double)num2));
 		}
-		int val = ((num2 == 1) ? 8000 : ((int)(LoopSeconds(s.Speed) * 1000.0 * 1.6 / (double)num2)));
+		// Aurora changes so little per loop that it can loop faster, each frame shown for less time: the same pace in
+		// smaller, quicker steps
+		double stretch = effect == "Aurora" ? 0.75 : 1.6;
+		int val = ((num2 == 1) ? 8000 : ((int)(LoopSeconds(s.Speed) * 1000.0 * stretch / (double)num2)));
 		return (Frames: list, Ticks: Math.Max(16, val));
 	}
 }

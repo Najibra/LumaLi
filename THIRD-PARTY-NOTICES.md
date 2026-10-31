@@ -52,6 +52,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+## SkiaSharp and SkiaSharp.Skottie
+
+Drawing and Lottie playback use SkiaSharp and SkiaSharp.Skottie (https://github.com/mono/SkiaSharp), referenced as NuGet packages and licensed under the MIT License. Copyright (c) 2015-2016 Xamarin, Inc.; Copyright (c) 2017-2018 Microsoft Corporation. They include Skia (https://skia.org), licensed under the BSD 3-Clause License, Copyright (c) 2011 Google Inc.
+
 ## LibreHardwareMonitorLib
 
 Sensor readings come from LibreHardwareMonitorLib (https://github.com/LibreHardwareMonitor/LibreHardwareMonitor), referenced as a NuGet package and licensed under the Mozilla Public License 2.0 (https://www.mozilla.org/MPL/2.0/). Its source is available from that repository.

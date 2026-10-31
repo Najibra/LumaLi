@@ -129,7 +129,7 @@ public sealed partial class ScreenRenderer : IDisposable
 			if (layout.Background == "image")
 			{
 				string? image = layout.Image;
-				if (image != null && image.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+				if (Imaging.IsMoving(image))
 				{
 					goto IL_00ae;
 				}
@@ -225,6 +225,7 @@ public sealed partial class ScreenRenderer : IDisposable
 				case "voidpanel":
 				case "constellation":
 				case "lightbeam":
+				case "lightbeam-skia":
 				case "standby":
 					flag3 = true;
 					break;
@@ -245,7 +246,7 @@ public sealed partial class ScreenRenderer : IDisposable
 					if (widget.Kind == WidgetKind.Image)
 					{
 						string? image = widget.Image;
-						num = ((image != null && !image.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)) ? 1 : 0);
+						num = ((image != null && !Imaging.IsMoving(image)) ? 1 : 0);
 					}
 					else
 					{
@@ -376,7 +377,23 @@ public sealed partial class ScreenRenderer : IDisposable
 				Image image = GetImage(w.Image);
 				if (image != null)
 				{
-					Imaging.DrawCover(g, image, r, t);
+					// a Lottie given a reading plays as a gauge, scrubbed to it (eased, as the stretched numbers are)
+					// rather than looping
+					double at = t;
+					if (w.FollowsReading && !string.IsNullOrEmpty(w.Sensor) && Lottie.IsLottie(w.Image))
+					{
+						(int, int, string) key = (w.X, w.Y, "image:" + w.Sensor);
+						double fraction = Fraction(w);
+						if (!_stretchState.TryGetValue(key, out (double Fraction, double Time) eased))
+						{
+							eased = (fraction, t);
+						}
+						double dt = Math.Clamp(t - eased.Time, 0.0, 1.0);
+						eased = (eased.Fraction + (fraction - eased.Fraction) * (1.0 - Math.Exp(-dt * 3.0)), t);
+						_stretchState[key] = eased;
+						Lottie.GaugeTime(image, eased.Fraction, out at);
+					}
+					Imaging.DrawCover(g, image, r, at);
 				}
 				break;
 			}
@@ -596,23 +613,8 @@ public sealed partial class ScreenRenderer : IDisposable
 			break;
 		}
 		case "tunnel":
-		{
-			g.Clear(color);
-			for (int i = 0; i < 14; i++)
-			{
-				double num = ((double)i / 14.0 + t * 0.12) % 1.0;
-				float num2 = (float)Math.Pow(num, 2.2);
-				RectangleF r = new RectangleF(960f - 1056f * num2, 240f - 360f * num2, 2112f * num2, 720f * num2);
-				if (r.Width < 4f)
-				{
-					continue;
-				}
-				using Pen pen = new Pen(Imaging.WithAlpha(Imaging.Mix(color2, color3, num), (int)(30.0 + 160.0 * num)), 1.5f + num2 * 5f);
-				using GraphicsPath path = Imaging.Round(r, 40f * num2 + 4f);
-				g.DrawPath(pen, path);
-			}
+			TunnelSkia(g, color, color2, color3, t);
 			break;
-		}
 		case "aurora":
 		{
 			if (_aurora == null)
@@ -1925,6 +1927,6 @@ public sealed partial class ScreenRenderer : IDisposable
 
 	private static bool IsGif(string? path)
 	{
-		return path?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ?? false;
+		return Imaging.IsMoving(path);
 	}
 }

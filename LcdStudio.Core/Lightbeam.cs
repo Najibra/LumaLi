@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -45,7 +45,7 @@ public sealed partial class ScreenRenderer
 
 	private static readonly Color BeamWarm = Color.FromArgb(255, 236, 220), BeamHot = Color.FromArgb(255, 164, 104), BeamAlarm = Color.FromArgb(255, 96, 78), BeamText = Color.FromArgb(232, 234, 244);
 
-	private Bitmap? _beamPage, _beamHaze, _beamFlare, _beamGlow, _beamBloom, _beamFrame;
+	private Bitmap? _beamPage, _beamFrame;
 
 	private int _beamFocus, _beamPrev;
 
@@ -57,7 +57,8 @@ public sealed partial class ScreenRenderer
 
 	private bool DrawLightbeam(Graphics g, Widget w, RectangleF r, double t)
 	{
-		if (w.Effect != "lightbeam" || w.Kind != WidgetKind.Panel)
+		// "lightbeam-skia" was the side-by-side trial of the Skia light; layouts saved with it still show Lightbeam
+		if ((w.Effect != "lightbeam" && w.Effect != "lightbeam-skia") || w.Kind != WidgetKind.Panel)
 		{
 			return DrawStandby(g, w, r, t);
 		}
@@ -237,100 +238,43 @@ public sealed partial class ScreenRenderer
 		var strands = new PointF[BeamStrands][];
 		for (int k = 0; k < BeamStrands; k++)
 		{
-			var pts = new PointF[49];
+			// Skia draws smooth curves through the points, so 65 of them give a true line
+			var pts = new PointF[65];
 			for (int i = 0; i < pts.Length; i++)
 			{
-				float x = -40f + i * 2000f / 48f;
+				float x = -40f + i * 2000f / (pts.Length - 1);
 				pts[i] = new PointF(x, Y(k, x));
 			}
 			strands[k] = pts;
 		}
 		// the landing flare breathes slowly, brighter under load
 		float flare = 0.6f + 0.35f * lift + 0.08f * (float)Math.Sin(t * 0.9);
+		BeamSkia(Y, strands, cx, arch, lift, flare, warm, flank, t);
+		BeamFinish(g, t, ch, warn, warm, flank);
+	}
 
-		// the soft light, at a quarter size: the warm smoke behind the crest and every strand drawn wide and faint. The
-		// page, this, a sixteenth-size smear of it for the wide bloom, and both again mirrored in the floor make the frame.
-		_beamGlow ??= new Bitmap(480, 120, PixelFormat.Format32bppPArgb);
-		_beamBloom ??= new Bitmap(120, 30, PixelFormat.Format32bppPArgb);
-		using (Graphics gg = Graphics.FromImage(_beamGlow))
+	/// <summary>The type laid onto the finished light, then the frame onto the screen.</summary>
+	private void BeamFinish(Graphics screen, double t, BeamChannel ch, bool warn, Color warm, Color flank)
+	{
+		using (Graphics g = Graphics.FromImage(_beamFrame!))
 		{
-			gg.Clear(Color.Transparent);
-			gg.ScaleTransform(0.25f, 0.25f);
-			float hw = 1200f * (0.8f + 0.2f * lift), hh = 640f * (0.7f + 0.3f * lift);
-			gg.DrawImage(BeamHazeSprite(), new RectangleF(cx - hw / 2f, BeamHy - arch * 0.8f - hh / 2f, hw, hh));
-			gg.SmoothingMode = SmoothingMode.AntiAlias;
-			using (LinearGradientBrush soft = BeamBrush(cx, warm, flank, 22))
-			using (var pen = new Pen(soft, 10f))
+			g.SmoothingMode = SmoothingMode.AntiAlias;
+			if (_deckText.Count > 450)
 			{
-				foreach (PointF[] pts in strands)
+				foreach (Bitmap old in _deckText.Values)
 				{
-					gg.DrawLines(pen, pts);
+					old.Dispose();
 				}
+				_deckText.Clear();
 			}
-			using var spot = new SolidBrush(Color.FromArgb((int)Math.Min(255f, 90f * flare), 230, 236, 255));
-			gg.FillEllipse(spot, BeamImpact - 70f, BeamHy - 15f, 180f, 30f);
+			BeamType(g, t, ch, warn, warm, flank);
 		}
-		// the page and the light added together pixel by pixel, the light scaled up fourfold on the way
-		BeamCompose();
-		// the rest is drawn onto the frame itself, so the moving type can be laid in by hand after it (see BeamSprites)
-		Graphics screen = g;
-		g = Graphics.FromImage(_beamFrame!);
-		g.SmoothingMode = SmoothingMode.AntiAlias;
-		// clear the shared text cache between frames rather than letting it clear mid-frame under queued type
-		if (_deckText.Count > 450)
-		{
-			foreach (Bitmap old in _deckText.Values)
-			{
-				old.Dispose();
-			}
-			_deckText.Clear();
-		}
-		// the sharp strands, in three weights
-		for (int tier = 0; tier < 3; tier++)
-		{
-			// each weight shimmers on its own slow beat
-			float shimmer = 0.85f + 0.15f * (float)Math.Sin(t * 1.1 + tier * 2.1);
-			using LinearGradientBrush b = BeamBrush(cx, warm, flank, (int)(new[] { 80, 150, 235 }[tier] * shimmer));
-			using var pen = new Pen(b, tier == 2 ? 1.4f : 1f);
-			for (int k = tier; k < BeamStrands; k += 3)
-			{
-				g.DrawLines(pen, strands[k]);
-			}
-		}
-		// the horizon, brightening toward the landing point and burning on to the right edge
-		using (var line = new LinearGradientBrush(new PointF(-1f, 0f), new PointF(1921f, 0f), Color.Black, Color.Black))
-		{
-			line.InterpolationColors = new ColorBlend
-			{
-				Colors = new[] { Color.FromArgb(40, flank), Color.FromArgb(110, flank), Color.FromArgb(255, 240, 244, 255), Color.FromArgb(200, Imaging.Mix(flank, Color.White, 0.6f)) },
-				Positions = new[] { 0f, 0.5f, BeamImpact / 1922f, 1f }
-			};
-			using var pen = new Pen(line, 1.3f);
-			g.DrawLine(pen, 0f, BeamHy, 1920f, BeamHy);
-		}
-		Bitmap fl = BeamFlareSprite();
-		float fw = fl.Width * (0.7f + 0.5f * flare), fh = fl.Height * (0.6f + 0.6f * flare);
-		BeamBlit(g, fl, new[] { new PointF(BeamImpact + 20f - fw / 2f, BeamHy - fh / 2f), new PointF(BeamImpact + 20f + fw / 2f, BeamHy - fh / 2f), new PointF(BeamImpact + 20f - fw / 2f, BeamHy + fh / 2f) }, Math.Min(1f, flare));
-		// embers lifting off the crest, more of them under load: each fades in and out with the load rather than
-		// appearing mid-flight, and each is born and dies at nothing, so the drift loops without a seam
-		for (int i = 0; i < 36; i++)
-		{
-			float share = Math.Clamp(6f + 30f * lift - i, 0f, 1f);
-			if (share <= 0f)
-			{
-				continue;
-			}
-			float e1 = (float)Hash01(i * 13 + 1), e2 = (float)Hash01(i * 19 + 2), e3 = (float)Hash01(i * 23 + 3);
-			float life = (float)((t * (0.16 + 0.12 * e1) + e2) % 1.0);
-			float x0 = cx + (e3 - 0.5f) * 720f;
-			float x = x0 + (e1 - 0.5f) * 70f * life, y = Y(i % BeamStrands, x0) - 56f * life * (0.5f + e2);
-			float size = 1.4f + 2.2f * e1;
-			using var ember = new SolidBrush(Color.FromArgb((int)(share * Math.Sin(Math.PI * life) * (110f + 120f * lift)), Imaging.Mix(warm, Color.White, 0.3f)));
-			g.FillEllipse(ember, x - size / 2f, y - size / 2f, size, size);
-		}
-		BeamType(g, t, ch, warn, warm, flank);
-		g.Dispose();
 		BeamSprites(_beamFrame!);
+		BeamPresent(screen);
+	}
+
+	private void BeamPresent(Graphics screen)
+	{
 		CompositingMode mode = screen.CompositingMode;
 		screen.CompositingMode = CompositingMode.SourceCopy;
 		screen.DrawImageUnscaled(_beamFrame!, 0, 0);
@@ -350,21 +294,6 @@ public sealed partial class ScreenRenderer
 			x += v * h;
 		}
 	}
-	/// <summary>The strands' colour along the screen: lilac flanks, warm white over the crest, white-hot at the landing.</summary>
-	private static LinearGradientBrush BeamBrush(float cx, Color warm, Color flank, int alpha)
-	{
-		var b = new LinearGradientBrush(new PointF(-41f, 0f), new PointF(1961f, 0f), Color.Black, Color.Black);
-		float P(float x) => Math.Clamp((x + 41f) / 2002f, 0.001f, 0.999f);
-		Color A(Color c, float m) => Color.FromArgb(Math.Clamp((int)(alpha * m), 0, 255), c);
-		Color white = Color.FromArgb(236, 240, 255);
-		b.InterpolationColors = new ColorBlend
-		{
-			Colors = new[] { A(flank, 0.35f), A(flank, 0.8f), A(warm, 1f), A(Imaging.Mix(warm, flank, 0.55f), 0.85f), A(Imaging.Mix(flank, white, 0.5f), 0.8f), A(white, 1f), A(Imaging.Mix(flank, white, 0.6f), 0.75f) },
-			Positions = new[] { 0f, P(cx - 430f), P(cx), P(cx + 400f), P(BeamImpact - 160f), P(BeamImpact), 1f }
-		};
-		return b;
-	}
-
 	private static void BeamBlit(Graphics g, Bitmap bmp, PointF[] dest, float alpha)
 	{
 		using var ia = new ImageAttributes();
@@ -396,182 +325,6 @@ public sealed partial class ScreenRenderer
 			Grain(_beamPage, 3);
 		}
 		return _beamPage;
-	}
-
-	/// <summary>
-	/// The frame's base, made by hand because GDI+ takes several times as long to stretch layers this size. At quarter
-	/// size: the light, plus its sixteenth-size bloom, plus both mirrored and squashed below the horizon and fading
-	/// toward the foot. That is stretched across first, then down, and added to the page, as light adds.
-	/// </summary>
-	private unsafe void BeamCompose()
-	{
-		_beamFrame ??= new Bitmap(1920, 480, PixelFormat.Format32bppPArgb);
-		_beamQ ??= new int[120 * 480 * 3];
-		_beamH ??= new int[120 * 1920 * 3];
-		Bitmap page = BeamPage(), glow = _beamGlow!, bloom = _beamBloom!;
-		var full = new Rectangle(0, 0, 1920, 480);
-		BitmapData lit = glow.LockBits(new Rectangle(0, 0, 480, 120), ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
-		BitmapData wide = bloom.LockBits(new Rectangle(0, 0, 120, 30), ImageLockMode.ReadWrite, PixelFormat.Format32bppPArgb);
-		try
-		{
-			// the bloom: each of its pixels the average of a four-by-four block of the light
-			for (int y = 0; y < 30; y++)
-			{
-				byte* bp = (byte*)wide.Scan0 + y * wide.Stride;
-				for (int x = 0; x < 120 * 4; x++)
-				{
-					int sum = 0;
-					for (int j = 0; j < 4; j++)
-					{
-						byte* lp = (byte*)lit.Scan0 + (y * 4 + j) * lit.Stride + (x >> 2) * 16 + (x & 3);
-						sum += lp[0] + lp[4] + lp[8] + lp[12];
-					}
-					bp[x] = (byte)(sum >> 4);
-				}
-			}
-			fixed (int* q = _beamQ)
-			{
-				// the light plus the bloom stretched up to it
-				for (int y = 0; y < 120; y++)
-				{
-					var (b0, b1, bf) = BeamRows(y, 4f, 30);
-					byte* lp = (byte*)lit.Scan0 + y * lit.Stride, r0 = (byte*)wide.Scan0 + b0 * wide.Stride, r1 = (byte*)wide.Scan0 + b1 * wide.Stride;
-					int* qp = q + y * 1440;
-					for (int x = 0; x < 480; x++)
-					{
-						int x0 = BeamTapsQ[x * 3] * 4, x1 = BeamTapsQ[x * 3 + 1] * 4, fx = BeamTapsQ[x * 3 + 2];
-						for (int c = 0; c < 3; c++)
-						{
-							int top = r0[x0 + c] * (256 - fx) + r0[x1 + c] * fx, bottom = r1[x0 + c] * (256 - fx) + r1[x1 + c] * fx;
-							qp[x * 3 + c] = lp[x * 4 + c] + ((top * (256 - bf) + bottom * bf) >> 16);
-						}
-					}
-				}
-				// below the horizon, the light from twice as far above it, dimming toward the foot
-				for (int y = (int)Math.Ceiling(BeamHy / 4f); y < 120; y++)
-				{
-					float sy = y * 4f + 1.5f, my = BeamHy - 2f * (sy - BeamHy);
-					if (my < 0f)
-					{
-						continue;
-					}
-					int weight = (int)(256f * 0.6f * (1f - 0.9f * (sy - BeamHy) / (480f - BeamHy)));
-					var (m0, m1, mf) = BeamRows(my, 4f, 120);
-					int* qp = q + y * 1440, s0 = q + m0 * 1440, s1 = q + m1 * 1440;
-					for (int i = 0; i < 1440; i++)
-					{
-						qp[i] += (s0[i] * (256 - mf) + s1[i] * mf >> 8) * weight >> 8;
-					}
-				}
-				fixed (int* h = _beamH)
-				{
-					// across: every quarter-size row stretched to the full width
-					for (int y = 0; y < 120; y++)
-					{
-						int* qp = q + y * 1440, hp = h + y * 5760;
-						for (int x = 0; x < 1920; x++)
-						{
-							int x0 = BeamTaps4[x * 3] * 3, x1 = BeamTaps4[x * 3 + 1] * 3, fx = BeamTaps4[x * 3 + 2];
-							hp[x * 3] = qp[x0] * (256 - fx) + qp[x1] * fx >> 8;
-							hp[x * 3 + 1] = qp[x0 + 1] * (256 - fx) + qp[x1 + 1] * fx >> 8;
-							hp[x * 3 + 2] = qp[x0 + 2] * (256 - fx) + qp[x1 + 2] * fx >> 8;
-						}
-					}
-					// down, onto the page
-					BitmapData dst = _beamFrame.LockBits(full, ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
-					BitmapData src = page.LockBits(full, ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
-					try
-					{
-						for (int y = 0; y < 480; y++)
-						{
-							var (g0, g1, gf) = BeamRows(y, 4f, 120);
-							int* h0 = h + g0 * 5760, h1 = h + g1 * 5760;
-							byte* sp = (byte*)src.Scan0 + y * src.Stride, dp = (byte*)dst.Scan0 + y * dst.Stride;
-							for (int x = 0; x < 1920; x++, sp += 4, dp += 4, h0 += 3, h1 += 3)
-							{
-								int v0 = sp[0] + (h0[0] * (256 - gf) + h1[0] * gf >> 8), v1 = sp[1] + (h0[1] * (256 - gf) + h1[1] * gf >> 8), v2 = sp[2] + (h0[2] * (256 - gf) + h1[2] * gf >> 8);
-								dp[0] = (byte)(v0 > 255 ? 255 : v0);
-								dp[1] = (byte)(v1 > 255 ? 255 : v1);
-								dp[2] = (byte)(v2 > 255 ? 255 : v2);
-								dp[3] = 255;
-							}
-						}
-					}
-					finally
-					{
-						page.UnlockBits(src);
-						_beamFrame.UnlockBits(dst);
-					}
-				}
-			}
-		}
-		finally
-		{
-			bloom.UnlockBits(wide);
-			glow.UnlockBits(lit);
-		}
-	}
-
-	private int[]? _beamQ, _beamH;
-
-	// for each column of a layer stretched fourfold: its left and right source pixels and the right one's weight in 256ths
-	private static readonly int[] BeamTaps4 = BeamTaps(1920, 480), BeamTapsQ = BeamTaps(480, 120);
-
-	private static int[] BeamTaps(int width, int from)
-	{
-		var taps = new int[width * 3];
-		for (int x = 0; x < width; x++)
-		{
-			float gx = Math.Max(0f, (x + 0.5f) / 4f - 0.5f);
-			taps[x * 3] = Math.Min(from - 1, (int)gx);
-			taps[x * 3 + 1] = Math.Min(from - 1, (int)gx + 1);
-			taps[x * 3 + 2] = (int)((gx - (int)gx) * 256f);
-		}
-		return taps;
-	}
-
-	private static (int, int, int) BeamRows(float y, float scale, int height)
-	{
-		float gy = Math.Max(0f, (y + 0.5f) / scale - 0.5f);
-		return (Math.Min(height - 1, (int)gy), Math.Min(height - 1, (int)gy + 1), (int)((gy - (int)gy) * 256f));
-	}
-	/// <summary>The warm smoke of light behind the crest.</summary>
-	private Bitmap BeamHazeSprite()
-	{
-		if (_beamHaze == null)
-		{
-			_beamHaze = new Bitmap(600, 320, PixelFormat.Format32bppPArgb);
-			using Graphics hg = Graphics.FromImage(_beamHaze);
-			using var p = new GraphicsPath();
-			p.AddEllipse(0f, 0f, 600f, 320f);
-			using var b = new PathGradientBrush(p) { CenterColor = Color.FromArgb(120, 92, 62, 52), SurroundColors = new[] { Color.FromArgb(0, 92, 62, 52) } };
-			b.Blend = new Blend { Factors = new[] { 0f, 0.5f, 1f }, Positions = new[] { 0f, 0.5f, 1f } };
-			hg.FillPath(b, p);
-		}
-		return _beamHaze;
-	}
-
-	/// <summary>The landing flare: a white-hot core in a flat blue bloom, with a long streak through it.</summary>
-	private Bitmap BeamFlareSprite()
-	{
-		if (_beamFlare == null)
-		{
-			_beamFlare = new Bitmap(720, 160, PixelFormat.Format32bppPArgb);
-			using Graphics fg = Graphics.FromImage(_beamFlare);
-			fg.SmoothingMode = SmoothingMode.AntiAlias;
-			void Glow(RectangleF r, Color c, int alpha)
-			{
-				using var p = new GraphicsPath();
-				p.AddEllipse(r);
-				using var b = new PathGradientBrush(p) { CenterColor = Color.FromArgb(alpha, c), SurroundColors = new[] { Color.FromArgb(0, c) } };
-				fg.FillPath(b, p);
-			}
-			Glow(new RectangleF(160f, 20f, 400f, 120f), Color.FromArgb(150, 170, 255), 120);
-			Glow(new RectangleF(0f, 70f, 720f, 20f), Color.FromArgb(220, 230, 255), 200);
-			Glow(new RectangleF(250f, 50f, 220f, 60f), Color.White, 230);
-			Glow(new RectangleF(310f, 68f, 100f, 24f), Color.White, 255);
-		}
-		return _beamFlare;
 	}
 
 	// ---------- the type ----------

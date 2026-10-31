@@ -222,6 +222,7 @@ internal static class SelfTest
 			{
 			case "Clock":
 			case "Image / GIF":
+			case "Lottie Gauge":
 			case "Carved":
 				flag = true;
 				break;
@@ -233,6 +234,46 @@ internal static class SelfTest
 			{
 				Check("Face " + text + " animates", !SamePixels(bitmap, b));
 			}
+		}
+		{
+			// following a reading: calm leaves the effect as it is; fully hot takes the hot colours and a quicker pace;
+			// halfway the colour is still vivid, turned round the colour wheel rather than mixed toward grey
+			var l = new LightingSettings();
+			EffectSettings aurora = Lighting.DefaultsFor("Aurora");
+			EffectSettings calm = Lighting.Warmed(aurora, l, 0), hotSet = Lighting.Warmed(aurora, l, Lighting.ReactSteps);
+			Color half = Lighting.HueMix(Imaging.Hex("#3affc8", Color.Cyan), Imaging.Hex(l.ReactHot1, Color.Orange), 0.5);
+			int hi = Math.Max((int)half.R, Math.Max((int)half.G, (int)half.B)), lo = Math.Min((int)half.R, Math.Min((int)half.G, (int)half.B));
+			double sat = (hi - lo) / (double)Math.Max(1, hi);
+			Check($"Reactive fan lights: calm unchanged, hot {hotSet.Color1}/{hotSet.Color2} at speed {hotSet.Speed}, halfway {Imaging.Hex(half)}",
+				calm.Color1 == aurora.Color1 && calm.Speed == aurora.Speed && hotSet.Color1 == l.ReactHot1 && hotSet.Color2 == l.ReactHot2 && hotSet.Speed > aurora.Speed && sat > 0.7);
+		}
+		{
+			// past its Warn at level the gauge turns the warning colour; a fan with no level stays in its own colours
+			(string g1, string g2) = Faces.DefaultColors("Lottie Gauge");
+			FanScreen plain = new FanScreen { Serial = "warn-off", Face = "Lottie Gauge", Sensor = "cpu.load", Color1 = g1, Color2 = g2 };
+			FanScreen warned = new FanScreen { Serial = "warn-on", Face = "Lottie Gauge", Sensor = "cpu.load", Color1 = g1, Color2 = g2, WarnAt = 80f, WarnColor = "#ff5a3c" };
+			using Bitmap calm = faces.Render(plain, 90f, 1.0);
+			using Bitmap hot = faces.Render(warned, 90f, 1.0);
+			hot.Save(Path.Combine(dir, "face-Lottie-Gauge-warning.png"), ImageFormat.Png);
+			// the face as a whole: cyan to pink normally, warm (more red, less blue) once warning
+			static (double R, double B) Mean(Bitmap m)
+			{
+				double r = 0, bl = 0;
+				for (int py = 0; py < m.Height; py += 4)
+				{
+					for (int px = 0; px < m.Width; px += 4)
+					{
+						Color p = m.GetPixel(px, py);
+						r += p.R;
+						bl += p.B;
+					}
+				}
+				double n = (m.Width / 4) * (m.Height / 4);
+				return (r / n, bl / n);
+			}
+			var (ar, ab) = Mean(calm);
+			var (br, bb) = Mean(hot);
+			Check($"Gauge turns its warning colour past Warn at  — red {ar:0}→{br:0}, blue {ab:0}→{bb:0}", br >= ar && bb < ab * 0.8);
 		}
 		ScreenRenderer renderer = new ScreenRenderer(sensors);
 		try

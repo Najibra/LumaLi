@@ -814,6 +814,48 @@ public sealed class LayoutPage : Page
 					}, primary: false, "\ue898")
 				}
 			});
+			// a Lottie can loop, or stand still at the point of its animation a reading has reached, as a gauge
+			if (Lottie.IsLottie(w.Image))
+			{
+				Select plays = new Select(new string[2] { "Loop", "Follow a reading" }, w.FollowsReading ? "Follow a reading" : "Loop")
+				{
+					Width = Theme.S(180f)
+				};
+				plays.SelectedIndexChanged += delegate
+				{
+					bool follows = plays.SelectedItem == "Follow a reading";
+					Set(delegate(Widget x)
+					{
+						x.FollowsReading = follows;
+					});
+					BuildWidgetProps(_canvas.Selected);
+				};
+				formGrid.Add("Plays", plays);
+				if (w.FollowsReading)
+				{
+					formGrid.Add("Reading", SensorSelect(w.Sensor, delegate(string k)
+					{
+						string i = k;
+						Set(delegate(Widget x)
+						{
+							x.Sensor = i;
+							SensorDef sensorDef = Sensors.Def(i);
+							x.Min = sensorDef.Min;
+							x.Max = sensorDef.Max;
+						});
+					}));
+					Stack range = new Stack(horizontal: true);
+					range.Controls.Add(Num("Min", w.Min, delegate(Widget x, double v)
+					{
+						x.Min = (float)v;
+					}));
+					range.Controls.Add(Num("Max", w.Max, delegate(Widget x, double v)
+					{
+						x.Max = (float)v;
+					}));
+					formGrid.Add("Range", range);
+				}
+			}
 		}
 		Stack c2 = new Stack(horizontal: true)
 		{
@@ -942,7 +984,7 @@ public sealed class LayoutPage : Page
 	{
 		using OpenFileDialog openFileDialog = new OpenFileDialog
 		{
-			Filter = "Images and GIFs|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*"
+			Filter = "Images, GIFs and Lottie animations|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie|All files|*.*"
 		};
 		return (openFileDialog.ShowDialog(this) == DialogResult.OK) ? Store.Import(openFileDialog.FileName) : null;
 	}
