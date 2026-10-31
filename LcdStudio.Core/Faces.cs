@@ -139,6 +139,8 @@ public sealed partial class Faces : IDisposable
 		return value;
 	}
 
+	private string? _shownBackground;
+
 	public void Forget(string? path)
 	{
 		if (path != null && _images.Remove(path, out Image value))
@@ -155,7 +157,7 @@ public sealed partial class Faces : IDisposable
 		case "Clock":
 			return false;
 		case "Image / GIF":
-			return Imaging.IsMoving(f.Background);
+			return f.HasPlaylist || Imaging.IsMoving(f.ActiveBackground(FanScreen.Now));
 		default:
 			return true;
 		}
@@ -202,6 +204,10 @@ public sealed partial class Faces : IDisposable
 		{
 			return "NET";
 		}
+		if (sensor == "game.fps")
+		{
+			return "GAME";
+		}
 		if (!sensor.StartsWith("fans."))
 		{
 			if (sensor == "time")
@@ -223,7 +229,8 @@ public sealed partial class Faces : IDisposable
 			"gpu.power" => "GPU POWER", 
 			"cpu.power" => "CPU POWER", 
 			"gpu.temp" => "GPU TEMP", 
-			"cpu.temp" => "CPU TEMP", 
+			"cpu.temp" => "CPU TEMP",
+			"game.fps" => "GAME FPS",
 			_ => Sensors.Def(sensor).Label.ToUpperInvariant(), 
 		};
 	}
@@ -246,7 +253,17 @@ public sealed partial class Faces : IDisposable
 		Color c2 = Imaging.Hex(fan.Color2, Color.Black);
 		FaceContext x = new FaceContext(graphics, fan, ValueText(fan.Sensor, value), Fraction(fan.Sensor, value), string.IsNullOrWhiteSpace(fan.Label) ? Caption(fan.Sensor) : fan.Label.ToUpperInvariant(), c, c2, t);
 		graphics.Clear(Color.Black);
-		Image image = GetImage(fan.Background);
+		string? background = fan.ActiveBackground(FanScreen.Now);
+		if (background != _shownBackground)
+		{
+			// a playlist moved on: the one before is let go, so only the showing one is held
+			if (_shownBackground != null && fan.HasPlaylist)
+			{
+				Forget(_shownBackground);
+			}
+			_shownBackground = background;
+		}
+		Image image = GetImage(background);
 		if (image != null && fan.Face != "Image / GIF" && fan.Face != "Lottie Gauge")
 		{
 			Imaging.DrawCover(graphics, image, new RectangleF(0f, 0f, 400f, 400f), t, 0.55f);

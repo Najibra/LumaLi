@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -9,7 +9,7 @@ using LcdStudio.Native;
 
 namespace LcdStudio.Devices;
 
-public sealed class LcdLink : IDisposable
+public sealed class LcdLink : IFanLink
 {
 	public const int FanPacket = 102400;
 
@@ -28,6 +28,9 @@ public sealed class LcdLink : IDisposable
 	public UsbDeviceInfo Info { get; }
 
 	public bool IsScreen => Info.Kind == DeviceKind.Screen;
+
+	/// <summary>Speaks the 8.8" screen's protocol (a 512-byte header before the picture, an answer to each): the screen and the Flex LCDs.</summary>
+	public bool IsSlv3 => Info.Kind == DeviceKind.Screen || Info.Kind == DeviceKind.FlexLcd;
 
 	public string? Firmware { get; private set; }
 
@@ -77,6 +80,27 @@ public sealed class LcdLink : IDisposable
 			}
 			SendPayload(101, Imaging.Jpeg(bitmap, 80), 2000);
 		}
+		else if (Info.Kind == DeviceKind.FlexLcd)
+		{
+			// as lian-li-linux starts a Flex LCD: frame rate, the clock synced and stopped, both layers cleared (no
+			// stop-play, which the Flex doesn't take)
+			Command(15, 2000, 120);
+			byte[] r3 = Command(10, 2000);
+			Firmware = ParseVersion(r3);
+			DateTime now2 = DateTime.Now;
+			Command(51, 2000, (byte)(now2.Year >> 8), (byte)now2.Year, (byte)now2.Month, (byte)now2.Day, (byte)now2.Hour, (byte)now2.Minute, (byte)now2.Second, 2);
+			Command(52, 2000, default(byte));
+			using (Bitmap clear = new Bitmap(400, 400, PixelFormat.Format32bppArgb))
+			{
+				SendPayload(102, Imaging.Png(clear), 2000);
+			}
+			using Bitmap black = new Bitmap(400, 400);
+			using (Graphics g = Graphics.FromImage(black))
+			{
+				g.Clear(Color.Black);
+			}
+			SendPayload(101, Imaging.Jpeg(black, 80), 2000);
+		}
 		else
 		{
 			Command(15, 300, 120);
@@ -109,7 +133,7 @@ public sealed class LcdLink : IDisposable
 	private byte[] SendPayload(byte cmd, byte[] data, int ackTimeout)
 	{
 		byte[] array = _packets.Build(cmd, PacketBuilder.BigEndian(data.Length));
-		byte[] array2 = new byte[IsScreen ? (512 + data.Length) : 102400];
+		byte[] array2 = new byte[IsSlv3 ? (512 + data.Length) : 102400];
 		array.CopyTo(array2, 0);
 		Array.Copy(data, 0, array2, 512, data.Length);
 		_usb.Write(array2);
@@ -123,14 +147,14 @@ public sealed class LcdLink : IDisposable
 		percent = Math.Clamp(percent, 0, 100);
 		if (_initialized && percent != _brightness)
 		{
-			Command(14, IsScreen ? 1000 : 300, (byte)(IsScreen ? percent : FanBrightness(percent)));
+			Command(14, IsSlv3 ? 1000 : 300, (byte)(IsSlv3 ? percent : FanBrightness(percent)));
 			_brightness = percent;
 		}
 	}
 
 	public void SendFrame(byte[] jpeg, int brightness)
 	{
-		int num = (IsScreen ? 512000 : 101888);
+		int num = (IsSlv3 ? 512000 : 101888);
 		if (jpeg.Length > num)
 		{
 			throw new InvalidOperationException($"Frame is {jpeg.Length / 1024} KB; limit {num / 1024} KB. Lower picture quality.");
@@ -142,9 +166,9 @@ public sealed class LcdLink : IDisposable
 				Initialize();
 			}
 			SetBrightness(brightness);
-			byte[] array = SendPayload(101, jpeg, IsScreen ? 1500 : 250);
+			byte[] array = SendPayload(101, jpeg, IsSlv3 ? 1500 : 250);
 			LastAck = ((array.Length != 0) ? BitConverter.ToString(array, 0, Math.Min(12, array.Length)) : "none");
-			if (IsScreen)
+			if (IsSlv3)
 			{
 				BufferLevel = ((array.Length > 8) ? array[8] : 0);
 				if (BufferLevel > 3)

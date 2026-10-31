@@ -120,6 +120,21 @@ public sealed class FansPage : Page
 		Main.Toast("Applied to all fans");
 	}
 
+	/// <summary>Builds the cards again, for a new fan order.</summary>
+	public void Rebuild()
+	{
+		_built = new List<string>();
+		Refresh0();
+	}
+
+	public void RefreshCards()
+	{
+		foreach (FanCard card in _cards)
+		{
+			card.RefreshValues();
+		}
+	}
+
 	public override void Tick()
 	{
 		foreach (FanCard card in _cards)

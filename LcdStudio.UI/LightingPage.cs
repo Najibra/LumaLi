@@ -52,6 +52,109 @@ public sealed class LightingPage : Page
 
 	private readonly Caption _reactState;
 
+	private readonly Stack _orderRows = new Stack();
+
+	private string _orderGroups = "?";
+
+	/// <summary>One row per wireless group: its fans, the order box and Identify.</summary>
+	private void BuildOrderRows()
+	{
+		var groups = E.Hub?.Groups.Where((LcdStudio.Devices.FanGroup g) => g.RgbSupported).ToList() ?? new List<LcdStudio.Devices.FanGroup>();
+		string sig = string.Join(",", groups.Select((LcdStudio.Devices.FanGroup g) => g.Id + ":" + g.FanCount));
+		if (sig == _orderGroups)
+		{
+			return;
+		}
+		_orderGroups = sig;
+		_orderRows.SuspendLayout();
+		foreach (Control c in _orderRows.Controls.Cast<Control>().ToList())
+		{
+			_orderRows.Controls.Remove(c);
+			c.Dispose();
+		}
+		if (groups.Count == 0)
+		{
+			_orderRows.Controls.Add(new Caption("Wireless fans not connected.", Theme.Faint, Theme.Small));
+		}
+		for (int i = 0; i < groups.Count; i++)
+		{
+			var g = groups[i];
+			string id = g.Id;
+			int fans = g.FanCount;
+			string current;
+			lock (E.Settings)
+			{
+				E.Settings.Lighting.GroupOrders.TryGetValue(id, out current!);
+			}
+			string natural = string.Join(",", Enumerable.Range(1, fans));
+			TextField box = new TextField(Lighting.ParseOrder(current, fans) != null ? current : natural, 90);
+			void Commit()
+			{
+				int[]? order = Lighting.ParseOrder(box.Text, fans);
+				if (order == null)
+				{
+					Main.Toast($"Type each number from 1 to {fans} once, such as {string.Join(",", Enumerable.Range(1, fans).Reverse())}");
+					return;
+				}
+				string text = string.Join(",", order.Select((int v) => v + 1));
+				box.Text = text;
+				lock (E.Settings)
+				{
+					if (E.Settings.Lighting.GroupOrders.TryGetValue(id, out string? was) && was == text)
+					{
+						return;
+					}
+					if (!E.Settings.Lighting.GroupOrders.ContainsKey(id) && text == natural)
+					{
+						return;
+					}
+					E.Settings.Lighting.GroupOrders[id] = text;
+				}
+				E.LightingChanged();
+				Main.Toast("Fan order saved; the effect is re-sent to the fans");
+			}
+			box.Box.Leave += delegate
+			{
+				Commit();
+			};
+			box.Box.KeyDown += delegate(object? _, KeyEventArgs e)
+			{
+				if (e.KeyCode == Keys.Return)
+				{
+					Commit();
+					e.SuppressKeyPress = true;
+				}
+			};
+			string legend = string.Join("  ", Enumerable.Range(0, fans).Select((int k) => $"{k + 1} {Lighting.IdentifyColors[k % Lighting.IdentifyColors.Length].Name}"));
+			_orderRows.Controls.Add(new Stack(horizontal: true)
+			{
+				Controls =
+				{
+					(Control?)new Caption($"Group {i + 1} · {g.Model} · {fans} fans", null, null, 230)
+					{
+						Margin = new Padding(0, Theme.S(8f), Theme.S(8f), 0)
+					},
+					(Control?)box,
+					(Control?)new Btn("Identify", delegate
+					{
+						if (!E.Settings.Lighting.Applied)
+						{
+							Main.Toast("Choose a fan animation below first");
+							return;
+						}
+						E.IdentifyGroup(id, TimeSpan.FromSeconds(12.0));
+						Main.Toast($"Group {i + 1}: {legend} — back to the effect in about 12 seconds");
+					}, primary: false, ""),
+					(Control?)new Caption(legend, Theme.Faint, Theme.Small)
+					{
+						Margin = new Padding(Theme.S(4f), Theme.S(8f), 0, 0)
+					}
+				}
+			});
+		}
+		_orderRows.ResumeLayout();
+	}
+
 	public override string Title => "Lighting";
 
 	public override string Subtitle => "Fan rings and the light strip around the 8.8\" screen. Click an animation to use it; each keeps its own speed, brightness and colours.";
@@ -173,6 +276,20 @@ public sealed class LightingPage : Page
 		{
 			AutoSize = false,
 			Size = new Size(Theme.S(490f), Theme.S(170f))
+		});
+		// the order the fans of each wireless group sit in, so effects that run across the fans run in that order
+		Card orderCard = AddCard("Fan order", 1074);
+		orderCard.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)new Caption("If an effect runs across your fans out of order, press Identify: each fan of the group lights in its own colour (fan 1 red, 2 green, 3 blue, 4 yellow). Then type the colours' numbers in the order the fans sit, such as 2,1,3, and press Enter.", Theme.SubText, Theme.Small)
+				{
+					AutoSize = false,
+					Size = new Size(Theme.S(1030f), Theme.S(36f))
+				},
+				(Control?)_orderRows
+			}
 		});
 		Card card2 = AddCard("Fan lights", 1074);
 		_fansOn = new Toggle("On", lighting.FansOn);
@@ -385,6 +502,7 @@ public sealed class LightingPage : Page
 
 	public override void Tick()
 	{
+		BuildOrderRows();
 		foreach (EffectTile tile in _tiles)
 		{
 			tile.Animate();

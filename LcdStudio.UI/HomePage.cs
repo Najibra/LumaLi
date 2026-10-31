@@ -104,7 +104,7 @@ public sealed class HomePage : Page
 		_screen = new ScreenPreview(E)
 		{
 			Size = new Size(Theme.S(668f), Theme.S(170f)),
-			Source = () => E.CurrentLayout,
+			Source = () => E.ShownLayout,
 			Margin = new Padding(0, 0, 0, Theme.S(10f))
 		};
 		_screen.Click += delegate

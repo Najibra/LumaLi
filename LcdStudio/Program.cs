@@ -516,6 +516,48 @@ public static class Program
 			File.WriteAllLines(Path.Combine(path2, "lighting-size.txt"), list2);
 			return 0;
 		}
+		if (args2.Contains("--device-report"))
+		{
+			// --device-report <file>: writes what the Copy device report button copies (devices aren't opened)
+			string file = args2.SkipWhile((string x) => x != "--device-report").Skip(1).FirstOrDefault() ?? "device-report.txt";
+			using Engine reportEngine = new Engine();
+			reportEngine.StartSensorsOnly();
+			Thread.Sleep(2500);
+			File.WriteAllText(file, LcdStudio.UI.SettingsPage.DeviceReport(reportEngine));
+			return 0;
+		}
+		if (args2.Contains("--fps-probe"))
+		{
+			// --fps-probe <file> [seconds]: counts presented frames for a while and writes each app's frame rate. Needs
+			// administrator rights for Windows' present events; touches no device.
+			string[] a = args2.SkipWhile((string x) => x != "--fps-probe").Skip(1).ToArray();
+			string file = a.FirstOrDefault() ?? "fps-probe.txt";
+			int seconds = a.Length > 1 && int.TryParse(a[1], out int sec) ? sec : 6;
+			var lines = new List<string>();
+			using (var fps = new GameFps())
+			{
+				fps.Start();
+				lines.Add("source: " + fps.Source);
+				for (int i = 0; i < seconds; i++)
+				{
+					Thread.Sleep(1000);
+					foreach (var (pid, rate) in fps.Rates().OrderByDescending(r => r.Value))
+					{
+						string name = "?";
+						try
+						{
+							name = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName;
+						}
+						catch
+						{
+						}
+						lines.Add($"t={i + 1}s  {name} ({pid}): {rate:0.0} fps");
+					}
+				}
+			}
+			File.WriteAllLines(file, lines);
+			return 0;
+		}
 		if (args2.Contains("--lighting-frames"))
 		{
 			// --lighting-frames <dir>: whether the fans take loops longer than 48 frames. For every group, uploads a

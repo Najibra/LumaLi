@@ -72,7 +72,8 @@ public sealed class LayoutCanvas : Control
 	{
 		get
 		{
-			float num = 4f;
+			// the screen's shape: wide, or stood on its end for a vertical layout
+			float num = (float)LayoutW / LayoutH;
 			float num2 = base.Width - Theme.S(8f);
 			float num3 = num2 / num;
 			if (num3 > (float)(base.Height - Theme.S(8f)))
@@ -84,7 +85,11 @@ public sealed class LayoutCanvas : Control
 		}
 	}
 
-	private float Zoom => Area.Width / 1920f;
+	private int LayoutW => Model?.Invoke().Width ?? 1920;
+
+	private int LayoutH => Model?.Invoke().Height ?? 480;
+
+	private float Zoom => Area.Width / LayoutW;
 
 	public event Action<Widget?>? SelectionChanged;
 
@@ -249,6 +254,7 @@ public sealed class LayoutCanvas : Control
 				screenLayout.Accent = screenLayout2.Accent;
 				screenLayout.Image = screenLayout2.Image;
 				screenLayout.ImageOpacity = screenLayout2.ImageOpacity;
+				screenLayout.Portrait = screenLayout2.Portrait;
 			}
 			Selected = ((num >= 0 && num < screenLayout.Widgets.Count) ? screenLayout.Widgets[num] : null);
 			AfterEdit();
@@ -380,7 +386,7 @@ public sealed class LayoutCanvas : Control
 
 	private IEnumerable<int> TargetsX()
 	{
-		return new int[3] { 0, 960, 1920 }.Concat(Model().Widgets.Where((Widget w) => w != _selected && w.Visible).SelectMany((Widget w) => new int[3]
+		return new int[3] { 0, LayoutW / 2, LayoutW }.Concat(Model().Widgets.Where((Widget w) => w != _selected && w.Visible).SelectMany((Widget w) => new int[3]
 		{
 			w.X,
 			w.X + w.W / 2,
@@ -390,7 +396,7 @@ public sealed class LayoutCanvas : Control
 
 	private IEnumerable<int> TargetsY()
 	{
-		return new int[3] { 0, 240, 480 }.Concat(Model().Widgets.Where((Widget w) => w != _selected && w.Visible).SelectMany((Widget w) => new int[3]
+		return new int[3] { 0, LayoutH / 2, LayoutH }.Concat(Model().Widgets.Where((Widget w) => w != _selected && w.Visible).SelectMany((Widget w) => new int[3]
 		{
 			w.Y,
 			w.Y + w.H / 2,
@@ -612,19 +618,19 @@ public sealed class LayoutCanvas : Control
 				w.X = 0;
 				break;
 			case "center":
-				w.X = (1920 - w.W) / 2;
+				w.X = (LayoutW - w.W) / 2;
 				break;
 			case "right":
-				w.X = 1920 - w.W;
+				w.X = LayoutW - w.W;
 				break;
 			case "top":
 				w.Y = 0;
 				break;
 			case "middle":
-				w.Y = (480 - w.H) / 2;
+				w.Y = (LayoutH - w.H) / 2;
 				break;
 			case "bottom":
-				w.Y = 480 - w.H;
+				w.Y = LayoutH - w.H;
 				break;
 			}
 		});

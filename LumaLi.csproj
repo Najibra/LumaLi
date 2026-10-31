@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>LumaLi</AssemblyName>
     <RootNamespace>LcdStudio</RootNamespace>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Company>LumaLi</Company>
     <Product>LumaLi</Product>
     <LangVersion>latest</LangVersion>

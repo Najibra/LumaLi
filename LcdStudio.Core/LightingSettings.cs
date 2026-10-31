@@ -55,6 +55,12 @@ public sealed class LightingSettings
 
 	public string ReactHot2 { get; set; } = "#ff1f4b";
 
+	/// <summary>
+	/// Per wireless group (by its id), the controller's fan numbers in the order the fans sit, such as "2,1,3", so an
+	/// effect that runs across the fans runs in their real order. Missing or empty is the controller's own order.
+	/// </summary>
+	public Dictionary<string, string> GroupOrders { get; set; } = new Dictionary<string, string>();
+
 	public EffectSettings For(string effect)
 	{
 		if (!Effects.TryGetValue(effect, out EffectSettings value))

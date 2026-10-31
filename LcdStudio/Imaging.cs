@@ -132,6 +132,10 @@ public static class Imaging
 		{
 			return LcdStudio.Core.Lottie.Load(path);
 		}
+		if (LcdStudio.Core.VideoClip.IsVideo(path))
+		{
+			return LcdStudio.Core.VideoClip.Load(path);
+		}
 		try
 		{
 			return Image.FromStream(new MemoryStream(File.ReadAllBytes(path)));
@@ -142,10 +146,10 @@ public static class Imaging
 		}
 	}
 
-	/// <summary>Whether the picture at the path moves: a GIF, or a Lottie animation.</summary>
+	/// <summary>Whether the picture at the path moves: a GIF, a Lottie animation or a video.</summary>
 	public static bool IsMoving(string? path)
 	{
-		return (path?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ?? false) || LcdStudio.Core.Lottie.IsLottie(path);
+		return (path?.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ?? false) || LcdStudio.Core.Lottie.IsLottie(path) || LcdStudio.Core.VideoClip.IsVideo(path);
 	}
 
 	public static void DrawCover(Graphics g, Image img, RectangleF r, double t, float opacity = 1f)
@@ -175,7 +179,7 @@ public static class Imaging
 
 	public static void SelectGifFrame(Image img, double t)
 	{
-		if (LcdStudio.Core.Lottie.Seek(img, t) || !img.FrameDimensionsList.Contains(FrameDimension.Time.Guid))
+		if (LcdStudio.Core.Lottie.Seek(img, t) || LcdStudio.Core.VideoClip.Seek(img, t) || !img.FrameDimensionsList.Contains(FrameDimension.Time.Guid))
 		{
 			return;
 		}

@@ -40,7 +40,10 @@ public sealed class LayoutPage : Page
 		"Trebuchet MS", "Verdana"
 	};
 
-	private static readonly string[] Backgrounds = new string[9] { "solid", "gradient", "aurora", "grid", "waves", "tunnel", "carved", "image", "video" };
+	private static readonly string[] Backgrounds = new string[10] { "solid", "gradient", "aurora", "silk", "grid", "waves", "tunnel", "carved", "image", "video" };
+
+	/// <summary>The backgrounds that fit a vertical layout (the others are drawn for the wide screen).</summary>
+	private static readonly string[] TallBackgrounds = new string[6] { "solid", "gradient", "aurora", "silk", "image", "video" };
 
 	internal LayoutCanvas Canvas => _canvas;
 
@@ -169,10 +172,20 @@ public sealed class LayoutPage : Page
 		BuildWidgetProps(null);
 		Body.SizeChanged += delegate
 		{
-			int num = Math.Max(Theme.S(700f), Body.ClientSize.Width - Theme.S(14f));
-			_canvas.Size = new Size(num, num / 4 + Theme.S(16f));
-			_builtIn.Width = num;
+			SizeCanvas();
 		};
+	}
+
+	/// <summary>The editor is a wide strip for a wide layout, and tall enough to work on a vertical one upright.</summary>
+	private void SizeCanvas()
+	{
+		int num = Math.Max(Theme.S(700f), Body.ClientSize.Width - Theme.S(14f));
+		int height = E.CurrentLayout.Portrait ? Theme.S(860f) : num / 4 + Theme.S(16f);
+		if (_canvas.Size != new Size(num, height))
+		{
+			_canvas.Size = new Size(num, height);
+		}
+		_builtIn.Width = num;
 	}
 
 	private Btn AlignButton(string glyph, string how)
@@ -379,8 +392,10 @@ public sealed class LayoutPage : Page
 			menu.Items.Add(text, null, delegate
 			{
 				Widget widget = make2();
-				widget.X = 960 - widget.W / 2;
-				widget.Y = Math.Max(0, 240 - widget.H / 2);
+				ScreenLayout shape = E.CurrentLayout;
+				widget.W = Math.Min(widget.W, shape.Width - 40);
+				widget.X = shape.Width / 2 - widget.W / 2;
+				widget.Y = Math.Max(0, shape.Height / 2 - widget.H / 2);
 				_canvas.Add(widget);
 			});
 		}
@@ -389,6 +404,7 @@ public sealed class LayoutPage : Page
 	public override void Refresh0()
 	{
 		RefreshLists();
+		SizeCanvas();
 		BuildBackground();
 		BuildLayoutCard();
 		BuildWidgetProps(_canvas.Selected);
@@ -984,9 +1000,14 @@ public sealed class LayoutPage : Page
 	{
 		using OpenFileDialog openFileDialog = new OpenFileDialog
 		{
-			Filter = "Images, GIFs and Lottie animations|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie|All files|*.*"
+			Filter = "Images, GIFs, Lottie animations and videos|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie;" + VideoClip.DialogPattern + "|All files|*.*"
 		};
-		return (openFileDialog.ShowDialog(this) == DialogResult.OK) ? Store.Import(openFileDialog.FileName) : null;
+		if (openFileDialog.ShowDialog(this) != DialogResult.OK)
+		{
+			return null;
+		}
+		string path = Store.Import(openFileDialog.FileName);
+		return (!VideoClip.IsVideo(path) || FanCard.PrepareVideo(this, Main, path)) ? path : null;
 	}
 
 	private void BuildBackground()
@@ -994,7 +1015,7 @@ public sealed class LayoutPage : Page
 		_bgCard.Controls.Clear();
 		ScreenLayout currentLayout = E.CurrentLayout;
 		FormGrid formGrid = new FormGrid(70);
-		Select style = new Select(Backgrounds, currentLayout.Background)
+		Select style = new Select(currentLayout.Portrait ? TallBackgrounds : Backgrounds, currentLayout.Background)
 		{
 			Width = Theme.S(150f)
 		};
@@ -1046,33 +1067,27 @@ public sealed class LayoutPage : Page
 			}
 			BuildBackground();
 		}, primary: false, "\ue898"));
-		formGrid.Add("Video", new Btn("Frames folder…", delegate
+		// a video file (MP4 and others Windows can play) loops behind the layout; older layouts may still use a frames folder
+		formGrid.Add("Video", new Btn("Upload video…", delegate
 		{
-			FolderBrowserDialog dlg = new FolderBrowserDialog
+			using OpenFileDialog dlg = new OpenFileDialog
 			{
-				Description = "Folder of 1920×480 JPEG frames (made with LumaLi.exe --make-frames)",
-				InitialDirectory = Store.Uploads
+				Filter = "Videos|" + VideoClip.DialogPattern
 			};
-			try
+			if (dlg.ShowDialog(this) == DialogResult.OK)
 			{
-				if (dlg.ShowDialog(this) == DialogResult.OK)
+				string path = Store.Import(dlg.FileName);
+				if (FanCard.PrepareVideo(this, Main, path))
 				{
 					_canvas.Mutate(delegate(ScreenLayout x)
 					{
-						x.Image = dlg.SelectedPath;
-						x.Background = "video";
+						x.Image = path;
+						x.Background = "image";
 					});
 				}
-				BuildBackground();
 			}
-			finally
-			{
-				if (dlg != null)
-				{
-					((IDisposable)dlg).Dispose();
-				}
-			}
-		}, primary: false, "\ue838"));
+			BuildBackground();
+		}, primary: false,"\ue838"));
 		Slider op = new Slider(10, 100, (int)(currentLayout.ImageOpacity * 100f))
 		{
 			Width = Theme.S(160f)
@@ -1115,7 +1130,30 @@ public sealed class LayoutPage : Page
 		};
 		stack.Controls.Add(new Caption(i.BuiltIn ? "Built-in template (edits make a copy)" : "Name", Theme.SubText, Theme.Small));
 		stack.Controls.Add(name);
+		Toggle vertical = new Toggle("Vertical (screen stood on end)", i.Portrait);
+		vertical.CheckedChanged += delegate
+		{
+			bool on = vertical.Checked;
+			_canvas.Mutate(delegate(ScreenLayout x)
+			{
+				if (x.Portrait != on)
+				{
+					x.Portrait = on;
+					// widgets keep their size; any that would fall off the new shape are brought back inside it
+					foreach (Widget w in x.Widgets)
+					{
+						w.W = Math.Min(w.W, x.Width);
+						w.H = Math.Min(w.H, x.Height);
+						w.X = Math.Clamp(w.X, 0, x.Width - w.W);
+						w.Y = Math.Clamp(w.Y, 0, x.Height - w.H);
+					}
+				}
+			});
+			BeginInvoke(Refresh0);
+		};
+		stack.Controls.Add(vertical);
 		stack.Controls.Add(new Btn("New blank layout", NewBlank, primary: false, "\ue710"));
+		stack.Controls.Add(new Btn("New vertical layout", NewVertical, primary: false, "\ue7f4"));
 		stack.Controls.Add(new Btn("Export…", Export, primary: false, "\ue74e"));
 		stack.Controls.Add(new Btn("Import…", Import, primary: false, "\ue838"));
 		stack.Controls.Add(new Btn("Remove layout", DeleteLayout, primary: false, "\ue74d"));
@@ -1147,6 +1185,39 @@ public sealed class LayoutPage : Page
 		E.SaveSoon();
 		_canvas.ResetHistory();
 		Refresh0();
+	}
+
+	private void NewVertical()
+	{
+		ScreenLayout screenLayout = new ScreenLayout
+		{
+			Name = UniqueName("New vertical layout"),
+			Portrait = true,
+			Background = "silk",
+			Color1 = "#05060f",
+			Color2 = "#1a2a80",
+			Accent = "#3fa9ff"
+		};
+		screenLayout.Widgets.Add(new Widget
+		{
+			Kind = WidgetKind.Text,
+			Text = "{time:HH:mm}",
+			X = 20,
+			Y = 120,
+			W = 440,
+			H = 170,
+			Size = 120f,
+			Align = "center"
+		});
+		lock (E.Settings)
+		{
+			E.Layouts.Add(screenLayout);
+			E.Settings.Layout = screenLayout.Name;
+		}
+		E.SaveSoon();
+		_canvas.ResetHistory();
+		Refresh0();
+		Main.Toast("Vertical layout: if it shows upside down on the screen, turn on Flip 180° in Settings");
 	}
 
 	private void Export()

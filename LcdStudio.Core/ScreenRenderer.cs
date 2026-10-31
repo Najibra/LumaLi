@@ -98,9 +98,22 @@ public sealed partial class ScreenRenderer : IDisposable
 		});
 	}
 
+	/// <summary>The frame being drawn: 1920 × 480, or 480 × 1920 for a vertical layout.</summary>
+	private int _w = 1920, _h = 480;
+
+	/// <summary>The backgrounds drawn to fit any shape; the rest are composed for the wide screen only.</summary>
+	private static readonly HashSet<string> AnyShape = new HashSet<string> { "solid", "gradient", "image", "video", "aurora", "silk" };
+
 	public Bitmap Render(ScreenLayout layout, double t)
 	{
-		Bitmap bitmap = new Bitmap(1920, 480, PixelFormat.Format32bppArgb);
+		_w = layout.Width;
+		_h = layout.Height;
+		if (layout.Portrait && !AnyShape.Contains(layout.Background))
+		{
+			layout = layout.Clone();
+			layout.Background = "gradient";
+		}
+		Bitmap bitmap = new Bitmap(_w, _h, PixelFormat.Format32bppArgb);
 		using Graphics graphics = Graphics.FromImage(bitmap);
 		Setup(graphics);
 		// relief text reworks the pixels already drawn beneath it, so it needs the frame itself
@@ -118,6 +131,7 @@ public sealed partial class ScreenRenderer : IDisposable
 		case "hud":
 		case "fluted":
 		case "papersea":
+		case "silk":
 			flag = true;
 			break;
 		default:
@@ -138,9 +152,11 @@ public sealed partial class ScreenRenderer : IDisposable
 			string text = BaseKey(layout, hashSet);
 			if (_base == null || text != _baseKey || (layout.Background == "aurora" && Math.Abs(t - _baseTime) >= 1.0 / 6.0))
 			{
-				if (_base == null)
+				if (_base == null || _base.Width != _w || _base.Height != _h)
 				{
-					_base = new Bitmap(1920, 480, PixelFormat.Format32bppPArgb);
+					_base?.Dispose();
+					_base = new Bitmap(_w, _h, PixelFormat.Format32bppPArgb);
+					text += "|new";
 				}
 				using Graphics g = Graphics.FromImage(_base);
 				Setup(g);
@@ -546,7 +562,7 @@ public sealed partial class ScreenRenderer : IDisposable
 		Color color = Imaging.Hex(l.Color1, Color.Black);
 		Color color2 = Imaging.Hex(l.Color2, color);
 		Color color3 = Imaging.Hex(l.Accent, Color.DeepSkyBlue);
-		RectangleF rectangleF = new RectangleF(0f, 0f, 1920f, 480f);
+		RectangleF rectangleF = new RectangleF(0f, 0f, _w, _h);
 		switch (l.Background)
 		{
 		case "solid":
@@ -617,21 +633,33 @@ public sealed partial class ScreenRenderer : IDisposable
 			break;
 		case "aurora":
 		{
-			if (_aurora == null)
+			if (_aurora == null || _aurora.Width != _w / 4 || _aurora.Height != _h / 4)
 			{
-				_aurora = new Bitmap(480, 120, PixelFormat.Format32bppPArgb);
+				_aurora?.Dispose();
+				_aurora = new Bitmap(_w / 4, _h / 4, PixelFormat.Format32bppPArgb);
 			}
 			using (Graphics graphics = Graphics.FromImage(_aurora))
 			{
 				graphics.SmoothingMode = SmoothingMode.AntiAlias;
 				graphics.Clear(color);
 				graphics.ScaleTransform(0.25f, 0.25f);
+				// the glows sit along the screen's long side, whichever way up it stands
+				bool tall = _h > _w;
 				for (int j = 0; j < 5; j++)
 				{
-					float num3 = (float)(1920.0 * (0.15 + 0.18 * (double)j) + Math.Sin(t * 0.35 + (double)j * 1.3) * 140.0);
-					float num4 = (float)(240.0 + Math.Cos(t * 0.27 + (double)j) * 110.0);
+					float along = (float)(1920.0 * (0.15 + 0.18 * (double)j) + Math.Sin(t * 0.35 + (double)j * 1.3) * 140.0);
+					float across = (float)(240.0 + Math.Cos(t * 0.27 + (double)j) * 110.0);
+					float num3 = tall ? across : along;
+					float num4 = tall ? along : across;
 					using GraphicsPath graphicsPath = new GraphicsPath();
-					graphicsPath.AddEllipse(num3 - 360f, num4 - 220f, 720f, 440f);
+					if (tall)
+					{
+						graphicsPath.AddEllipse(num3 - 220f, num4 - 360f, 440f, 720f);
+					}
+					else
+					{
+						graphicsPath.AddEllipse(num3 - 360f, num4 - 220f, 720f, 440f);
+					}
 					PathGradientBrush pathGradientBrush = new PathGradientBrush(graphicsPath);
 					pathGradientBrush.CenterColor = Imaging.WithAlpha((j % 2 == 0) ? color3 : color2, 90);
 					pathGradientBrush.SurroundColors = new Color[1] { Color.Transparent };
@@ -641,7 +669,7 @@ public sealed partial class ScreenRenderer : IDisposable
 			}
 			InterpolationMode interpolationMode = g.InterpolationMode;
 			g.InterpolationMode = InterpolationMode.Bilinear;
-			g.DrawImage(_aurora, new RectangleF(-2f, -2f, 1924f, 484f));
+			g.DrawImage(_aurora, new RectangleF(-2f, -2f, _w + 4, _h + 4));
 			g.InterpolationMode = interpolationMode;
 			break;
 		}
@@ -686,6 +714,9 @@ public sealed partial class ScreenRenderer : IDisposable
 			break;
 		case "papersea":
 			PaperSea(g, color, color2, color3, t);
+			break;
+		case "silk":
+			Silk(g, color, color2, color3, t);
 			break;
 		case "newsprint":
 			Newsprint(g, color, color2, color3);
@@ -1907,6 +1938,7 @@ public sealed partial class ScreenRenderer : IDisposable
 		case "hud":
 		case "fluted":
 		case "papersea":
+		case "silk":
 			flag = true;
 			break;
 		default:

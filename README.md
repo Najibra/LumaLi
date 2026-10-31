@@ -43,6 +43,7 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 - **Lighting:** 21 animated fan effects (including Aurora and Comet trail) with their own speed, brightness and colours, and a light strip that can **match the screen layout** — the strip takes its colours and movement from whatever the screen is showing.
 - **Reactive lighting:** the fans can follow a reading, such as GPU temperature, and warm from your colours toward amber and red in four gentle steps as it rises.
 - **Standby screen:** a calm face with your logo (or the LumaLi mark), a large clock and the date, shown when the PC is idle or locked and left on the screen as it sleeps, hibernates or shuts down (if your motherboard keeps USB powered).
+- **New in 1.2:** vertical layouts for a screen stood on its end (four templates and a new Silk background), per-game layouts that switch in while a chosen game runs, a game frame-rate sensor, video files and shuffled playlists on the fan screens, and fan order you can set to match how your fans are mounted.
 - **Cooling:** presets, an automatic curve that follows GPU or CPU temperature (with a fail-safe to 100 % if the sensor stops), per-group trim and fan calibration.
 
 ## Screenshots
@@ -84,9 +85,11 @@ LumaLi talks to specific devices over USB. It does **not** support every Lian Li
 | Light strip around the 8.8" screen | `0416:8050` | ✅ Supported and tested |
 | UNI FAN TL Wireless LCD — fan screens | `1CBE:0006` | ✅ Supported and tested (five fans) |
 | Wireless controller/dongle — fan lighting and speed | `0416:8040` / `0416:8041` | ✅ Tested with TL Wireless fans · ⚠️ SL Wireless, SL-INF and CL wireless groups are recognised but untested |
+| TL Flex LCD / SL Infinity Flex LCD — fan screens | `1CBE:A018` / `1CBE:A019` | 🧪 Experimental (1.2), untested — reports welcome |
+| Wired TL LCD fans — fan screens | `04FC:7393` | 🧪 Experimental (1.2), untested — reports welcome |
 | Wired UNI HUB controllers, Galahad / HydroShift LCD coolers, Strimer, O11 Vision and other screens | — | ❌ Not supported |
 
-If you own a device marked untested or not supported and would like to help, please open an issue with the output of `LumaLi.exe --devices`.
+If you own a device marked untested or not supported and would like to help, please open an issue and paste the report from **Settings → Devices → Copy device report**.
 
 ## Getting started
 

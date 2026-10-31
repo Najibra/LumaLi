@@ -45,6 +45,10 @@ public sealed class SettingsPage : Page
 
 	private int _tick;
 
+	private Stack _gameRows = null!;
+
+	private Caption _gameState = null!;
+
 	private const string RunKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
 	public override string Title => "Settings";
@@ -118,7 +122,8 @@ public sealed class SettingsPage : Page
 						}, primary: false, "\ue72c"),
 						(Control?)new Btn("Restart stuck devices", RestartStuck, primary: false, "\ue7ba")
 					}
-				}
+				},
+				(Control?)new Btn("Copy device report", CopyReport, primary: false, "\ue8c8")
 			}
 		});
 		Card card2 = AddCard("8.8\" screen", 530);
@@ -257,6 +262,28 @@ public sealed class SettingsPage : Page
 				(Control?)new Caption("When the PC is off, the screen only stays lit if your motherboard keeps USB powered: turn off ErP / deep sleep in the BIOS. With the screen's own clock, the time keeps running; without it, the standby face stays with the time the PC went down.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(44f)) }
 			}
 		});
+		// layouts the screen switches to while a chosen game runs
+		Card gameCard = AddCard("Game profiles", 1074);
+		_gameRows = new Stack();
+		_gameState = new Caption("", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(20f)) };
+		gameCard.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)new Caption("While a game below is running, the 8.8\" screen shows its layout, then goes back to your chosen layout when the game closes. The Layout page still edits your chosen layout.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(24f)) },
+				(Control?)_gameRows,
+				(Control?)new Stack(horizontal: true)
+				{
+					Controls =
+					{
+						(Control?)new Btn("Add a running game…", AddRunningGame, primary: true, ""),
+						(Control?)new Btn("Add from a program file…", AddGameFile, primary: false, "")
+					}
+				},
+				(Control?)_gameState
+			}
+		});
+		BuildGameRows();
 		AddCard("About", 1074).Controls.Add(new Stack
 		{
 			Controls = 
@@ -282,6 +309,144 @@ public sealed class SettingsPage : Page
 		});
 	}
 
+	private void BuildGameRows()
+	{
+		_gameRows.SuspendLayout();
+		while (_gameRows.Controls.Count > 0)
+		{
+			_gameRows.Controls[0].Dispose();
+		}
+		List<GameProfile> profiles;
+		lock (E.Settings)
+		{
+			profiles = E.Settings.GameProfiles.ToList();
+		}
+		string[] layouts = E.Layouts.Select((ScreenLayout l) => l.Name).ToArray();
+		foreach (GameProfile p in profiles)
+		{
+			GameProfile profile = p;
+			Caption name = new Caption(string.IsNullOrEmpty(p.Title) || p.Title == p.Game ? p.Game : p.Title + "  (" + p.Game + ".exe)", Theme.Text, Theme.Body)
+			{
+				AutoSize = false,
+				AutoEllipsis = true,
+				Size = new Size(Theme.S(420f), Theme.S(30f)),
+				TextAlign = ContentAlignment.MiddleLeft
+			};
+			Select layout = new Select(layouts, layouts.Contains(p.Layout) ? p.Layout : layouts.FirstOrDefault() ?? "") { Width = Theme.S(300f) };
+			layout.SelectedIndexChanged += delegate
+			{
+				string chosen = layout.SelectedItem?.ToString() ?? "";
+				Change(delegate { profile.Layout = chosen; });
+			};
+			Btn remove = new Btn("Remove", delegate
+			{
+				Change(delegate(Settings x) { x.GameProfiles.Remove(profile); });
+				BeginInvoke(BuildGameRows);
+			}, primary: false, "");
+			_gameRows.Controls.Add(new Stack(horizontal: true) { Controls = { (Control?)name, (Control?)layout, (Control?)remove } });
+		}
+		if (profiles.Count == 0)
+		{
+			_gameRows.Controls.Add(new Caption("No games yet.", Theme.Faint, Theme.Small));
+		}
+		_gameRows.ResumeLayout();
+	}
+
+	private void AddGame(string game, string title)
+	{
+		game = Path.GetFileNameWithoutExtension(game.Trim());
+		if (game.Length == 0)
+		{
+			return;
+		}
+		bool added = false;
+		Change(delegate(Settings x)
+		{
+			if (!x.GameProfiles.Any((GameProfile g) => g.Game.Equals(game, StringComparison.OrdinalIgnoreCase)))
+			{
+				x.GameProfiles.Add(new GameProfile { Game = game, Title = title, Layout = x.Layout });
+				added = true;
+			}
+		});
+		BuildGameRows();
+		Main.Toast(added ? "Added " + (title.Length > 0 ? title : game) + ": pick its layout" : game + " is already in the list");
+	}
+
+	/// <summary>Lists the programs that have a window open, newest first, so a running game is easy to pick.</summary>
+	private void AddRunningGame()
+	{
+		var found = new List<(string Game, string Title)>();
+		int self = Environment.ProcessId;
+		foreach (Process p in Process.GetProcesses())
+		{
+			try
+			{
+				if (p.Id != self && p.MainWindowHandle != IntPtr.Zero && !string.IsNullOrWhiteSpace(p.MainWindowTitle) && p.SessionId == Process.GetCurrentProcess().SessionId)
+				{
+					found.Add((p.ProcessName, p.MainWindowTitle));
+				}
+			}
+			catch
+			{
+			}
+			finally
+			{
+				p.Dispose();
+			}
+		}
+		string[] skip = { "explorer", "TextInputHost", "ApplicationFrameHost", "SystemSettings", "LumaLi" };
+		found = found.Where((t) => !skip.Contains(t.Game, StringComparer.OrdinalIgnoreCase)).GroupBy((t) => t.Game, StringComparer.OrdinalIgnoreCase).Select((g) => g.First()).OrderBy((t) => t.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
+		if (found.Count == 0)
+		{
+			Main.Toast("No program windows found. Start the game, or add its program file");
+			return;
+		}
+		using Form dialog = new Form
+		{
+			Text = "Add a running game",
+			FormBorderStyle = FormBorderStyle.FixedDialog,
+			StartPosition = FormStartPosition.CenterParent,
+			MinimizeBox = false,
+			MaximizeBox = false,
+			ShowInTaskbar = false,
+			ClientSize = new Size(Theme.S(520f), Theme.S(380f)),
+			BackColor = Theme.Card,
+			ForeColor = Theme.Text,
+			Font = Theme.Body
+		};
+		ListBox list = new ListBox
+		{
+			Dock = DockStyle.Fill,
+			BackColor = Theme.Card,
+			ForeColor = Theme.Text,
+			BorderStyle = BorderStyle.None,
+			IntegralHeight = false
+		};
+		foreach (var (game, title) in found)
+		{
+			list.Items.Add(title + "   —   " + game + ".exe");
+		}
+		list.SelectedIndex = 0;
+		Button ok = new Button { Text = "Add", DialogResult = DialogResult.OK, Dock = DockStyle.Bottom, Height = Theme.S(34f), FlatStyle = FlatStyle.Flat };
+		list.DoubleClick += delegate { dialog.DialogResult = DialogResult.OK; };
+		dialog.Controls.Add(list);
+		dialog.Controls.Add(ok);
+		dialog.AcceptButton = ok;
+		if (dialog.ShowDialog(this) == DialogResult.OK && list.SelectedIndex >= 0)
+		{
+			AddGame(found[list.SelectedIndex].Game, found[list.SelectedIndex].Title);
+		}
+	}
+
+	private void AddGameFile()
+	{
+		using OpenFileDialog dialog = new OpenFileDialog { Filter = "Programs|*.exe", Title = "Choose the game's program file" };
+		if (dialog.ShowDialog(this) == DialogResult.OK)
+		{
+			AddGame(dialog.FileName, "");
+		}
+	}
+
 	private Slider Slide(FormGrid grid, string label, int min, int max, int value, Action<Settings, int> apply, string unit)
 	{
 		string unit2 = unit;
@@ -302,12 +467,109 @@ public sealed class SettingsPage : Page
 		return s;
 	}
 
+	/// <summary>Copies a plain-text summary of this PC's Lian Li devices, for a GitHub issue or a Reddit reply.</summary>
+	private void CopyReport()
+	{
+		try
+		{
+			Clipboard.SetText(DeviceReport(E));
+			Main.Toast("Device report copied: paste it into your GitHub issue");
+		}
+		catch (Exception ex)
+		{
+			Main.Toast("Couldn't copy the report: " + ex.Message);
+		}
+	}
+
+	/// <summary>
+	/// What LumaLi found and how it is running, plus every Lian Li USB device Windows knows (also ones LumaLi doesn't
+	/// support yet, which is what a request for new hardware needs). No serial numbers or personal paths.
+	/// </summary>
+	internal static string DeviceReport(Engine e)
+	{
+		var sb = new System.Text.StringBuilder();
+		sb.AppendLine("LumaLi device report");
+		sb.AppendLine("LumaLi " + Application.ProductVersion.Split('+')[0] + (IsAdmin() ? " (administrator)" : " (not administrator)"));
+		sb.AppendLine("Windows " + Environment.OSVersion.Version);
+		sb.AppendLine("Processor: " + (e.Sensors.Text("cpu.name") ?? "?") + " · Graphics: " + (e.Sensors.Text("gpu.name") ?? "?"));
+		sb.AppendLine("CPU temperature: " + (e.Sensors.CpuTempAvailable ? "available" : "unavailable") + " · Game frame rate: " + (e.Sensors.GameFpsSource ?? "off"));
+		string[] rivals = Engine.CompetingProcesses();
+		if (rivals.Length > 0)
+		{
+			sb.AppendLine("Also running: " + string.Join(", ", rivals));
+		}
+		sb.AppendLine();
+		sb.AppendLine("Outputs:");
+		foreach (OutputStatus o in e.AllOutputs())
+		{
+			sb.AppendLine($"  {o.Name}: {(o.Present ? o.State : "not found")}{(o.Firmware != null ? " · firmware " + o.Firmware : "")}{(o.Running ? $" · {o.Fps:0.0} fps" : "")}");
+		}
+		WirelessHub? hub = e.Hub;
+		if (hub != null)
+		{
+			for (int i = 0; i < hub.Groups.Count; i++)
+			{
+				sb.AppendLine($"  {e.GroupName(hub.Groups[i], i)}: {hub.Groups[i].Model} ×{hub.Groups[i].FanCount}");
+			}
+		}
+		sb.AppendLine();
+		sb.AppendLine("Lian Li USB devices Windows knows (vendor:product, name):");
+		foreach (string line in KnownUsb())
+		{
+			sb.AppendLine("  " + line);
+		}
+		return sb.ToString();
+	}
+
+	private static List<string> KnownUsb()
+	{
+		var lines = new List<string>();
+		// Lian Li's own vendor IDs, and from the shared 04FC vendor only the wired TL LCD
+		string[] vendors = { "vid_1cbe", "vid_0416", "vid_04fc&pid_7393" };
+		try
+		{
+			using RegistryKey? usb = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\USB");
+			foreach (string id in usb?.GetSubKeyNames() ?? Array.Empty<string>())
+			{
+				string low = id.ToLowerInvariant();
+				if (!vendors.Any(low.StartsWith))
+				{
+					continue;
+				}
+				using RegistryKey? dev = usb!.OpenSubKey(id);
+				int count = dev?.SubKeyCount ?? 0;
+				string desc = "";
+				foreach (string inst in dev?.GetSubKeyNames() ?? Array.Empty<string>())
+				{
+					using RegistryKey? k = dev!.OpenSubKey(inst);
+					string? d = k?.GetValue("FriendlyName") as string ?? k?.GetValue("DeviceDesc") as string;
+					if (d != null)
+					{
+						desc = d.Contains(';') ? d[(d.LastIndexOf(';') + 1)..] : d;
+						break;
+					}
+				}
+				string ids = low.Replace("vid_", "").Replace("&pid_", ":").Replace("&mi_", " interface ");
+				lines.Add($"{ids.ToUpperInvariant()}  {desc}{(count > 1 ? $" ({count} seen)" : "")}");
+			}
+		}
+		catch (Exception ex)
+		{
+			lines.Add("(couldn't read: " + ex.Message + ")");
+		}
+		if (lines.Count == 0)
+		{
+			lines.Add("(none)");
+		}
+		return lines;
+	}
+
 	private async void RestartStuck()
 	{
 		List<UsbDeviceInfo> stuck = E.StuckDevices();
 		if (stuck.Count == 0)
 		{
-			stuck = E.Devices.Where((UsbDeviceInfo d) => d.Kind != DeviceKind.FanLcd).ToList();
+			stuck = E.Devices.Where((UsbDeviceInfo d) => !WinUsb.IsFanScreen(d.Kind)).ToList();
 		}
 		if (MessageBox.Show(this, "Restart these devices? Windows will ask for administrator permission once. It is the same as unplugging and replugging them.\n\n" + string.Join("\n", stuck.Select((UsbDeviceInfo d) => "• " + d.Name)), "Restart stuck devices", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK)
 		{
@@ -409,10 +671,20 @@ public sealed class SettingsPage : Page
 		{
 			UpdateDevices();
 		}
-		string text = (E.Sensors.CpuTempAvailable ? $"CPU temperature: {E.Sensors.Get("cpu.temp"):0} °C" : (IsAdmin() ? "CPU temperature unavailable. On Ryzen 9000 it needs the PawnIO driver: winget install namazso.PawnIO" : "CPU temperature needs administrator rights (and on Ryzen 9000 the PawnIO driver). GPU readings work without."));
+		string text = (E.Sensors.CpuTempAvailable ? $"CPU temperature: {E.Sensors.Get("cpu.temp"):0} °C" : (IsAdmin() ? "CPU temperature unavailable. On Ryzen 9000 it needs the PawnIO driver: winget install namazso.PawnIO" : "CPU temperature and game frame rate need administrator rights (CPU temperature also the PawnIO driver on Ryzen 9000). GPU readings work without."));
+		if (E.Sensors.GameFpsSource == "Windows")
+		{
+			text += " · Game frame rate: on";
+		}
 		if (_cpuTemp.Text != text)
 		{
 			_cpuTemp.Text = text;
+		}
+		GameProfile? game = E.ActiveGame;
+		string state = game == null ? "" : $"Now showing {game.Layout} for {(game.Title.Length > 0 ? game.Title : game.Game)}.";
+		if (_gameState.Text != state)
+		{
+			_gameState.Text = state;
 		}
 	}
 

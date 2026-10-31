@@ -248,6 +248,55 @@ internal static class SelfTest
 				calm.Color1 == aurora.Color1 && calm.Speed == aurora.Speed && hotSet.Color1 == l.ReactHot1 && hotSet.Color2 == l.ReactHot2 && hotSet.Speed > aurora.Speed && sat > 0.7);
 		}
 		{
+			// fan order: "2,1,3" puts the effect's first ring on controller fan 2
+			int[]? order = Lighting.ParseOrder("2,1,3", 3);
+			var ident = Lighting.IdentifyFrame(3, 26);
+			var moved = Lighting.Reorder(ident, 26, order)[0];
+			bool ok = order != null && moved[26].R == 255 && moved[26].G == 0 && moved[0].G == 255 && moved[52].B == 255
+				&& Lighting.ParseOrder("1,1,3", 3) == null && Lighting.ParseOrder("1,2", 3) == null && Lighting.ParseOrder("3 2 1", 3) != null
+				&& ReferenceEquals(Lighting.Reorder(ident, 26, Lighting.ParseOrder("1,2,3", 3)), ident);
+			Check("Fan order moves each ring to the fan that sits there", ok);
+		}
+		{
+			// shuffle: every item comes up once a round, and never the same one twice in a row
+			bool fair = true, noRepeat = true;
+			int last = -1;
+			for (long turn = 0; turn < 400; turn++)
+			{
+				int i = FanScreen.ShuffledIndex(turn, 4);
+				noRepeat &= i != last;
+				last = i;
+			}
+			for (long round = 0; round < 50; round++)
+			{
+				fair &= Enumerable.Range(0, 4).Select((int k) => FanScreen.ShuffledIndex(round * 4 + k, 4)).Distinct().Count() == 4;
+			}
+			var fan = new FanScreen { Playlist = new List<string> { "a.mp4", "b.gif", "c.png" }, Shuffle = false, PlaylistSeconds = 10 };
+			Check("Playlist shuffle: each upload once a round, no repeats back to back, in-order turns", fair && noRepeat && fan.ActiveBackground(0) == "a.mp4" && fan.ActiveBackground(15) == "b.gif" && fan.ActiveBackground(25) == "c.png" && fan.ActiveBackground(35) == "a.mp4");
+		}
+		{
+			// what the fan loop draws from is a full copy: the playlist, gauge style and warning reach the fan itself
+			var f = new FanScreen { Serial = "x", GaugeStyle = "Needle", WarnAt = 80f, Playlist = new List<string> { "a.png", "b.png" } };
+			FanScreen s = f.Snapshot();
+			f.Playlist.Add("c.png");
+			Check("Fan frames draw from every setting (playlist, gauge style, warning)", s.HasPlaylist && s.Playlist.Count == 2 && s.GaugeStyle == "Needle" && s.WarnAt == 80f && s.Serial == "x"
+				&& LcdStudio.Native.WinUsb.IsFanScreen(LcdStudio.Native.DeviceKind.FlexLcd) && !LcdStudio.Native.WinUsb.IsFanScreen(LcdStudio.Native.DeviceKind.Screen));
+		}
+		{
+			// a wired TL LCD packet as lian-li-linux builds it: report 2, command, total size, packet number, length
+			byte[] pk = LcdStudio.Devices.TlLcdLink.Build(0x46, 70000, 3, new byte[600]);
+			Check("Wired TL LCD packet header", pk.Length == 512 && pk[0] == 2 && pk[1] == 0x46 && pk[2] == 0 && pk[3] == 1 && pk[4] == 0x11 && pk[5] == 0x70
+				&& pk[8] == 3 && pk[9] == 1 && pk[10] == 0xF5);
+		}
+		{
+			// game profiles survive a save and load, and an old settings file without them loads with none
+			var s = new Settings();
+			s.GameProfiles.Add(new GameProfile { Game = "Carpenter", Title = "Carpenter Sim", Layout = "Neon" });
+			Settings back = System.Text.Json.JsonSerializer.Deserialize<Settings>(System.Text.Json.JsonSerializer.Serialize(s))!;
+			Settings old = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"Layout\":\"Void\"}")!;
+			Check("Game profiles save and load", back.GameProfiles.Count == 1 && back.GameProfiles[0].Game == "Carpenter" && back.GameProfiles[0].Layout == "Neon" && old.GameProfiles.Count == 0);
+		}
+		{
 			// past its Warn at level the gauge turns the warning colour; a fan with no level stays in its own colours
 			(string g1, string g2) = Faces.DefaultColors("Lottie Gauge");
 			FanScreen plain = new FanScreen { Serial = "warn-off", Face = "Lottie Gauge", Sensor = "cpu.load", Color1 = g1, Color2 = g2 };
@@ -281,7 +330,8 @@ internal static class SelfTest
 			foreach (ScreenLayout item5 in Templates.All())
 			{
 				using Bitmap bitmap2 = renderer.Render(item5, 2.0);
-				using Bitmap bitmap3 = Imaging.Rotated(bitmap2, 90);
+				// the panel takes 480 × 1920: a wide frame is turned a quarter, a vertical one goes as drawn
+				using Bitmap bitmap3 = item5.Portrait ? (Bitmap)bitmap2.Clone() : Imaging.Rotated(bitmap2, 90);
 				byte[] array3 = Imaging.Jpeg(bitmap3, 90);
 				bitmap2.Save(Path.Combine(dir, "screen-" + item5.Name.Replace(' ', '-') + ".png"), ImageFormat.Png);
 				Check($"Template {item5.Name}: native 480×1920, JPEG {array3.Length / 1024} KB < 500 KB", bitmap3.Width == 480 && bitmap3.Height == 1920 && array3.Length < 512000);

@@ -26,7 +26,7 @@ public sealed partial class ScreenRenderer
 	/// </summary>
 	private unsafe void SkiaDraw(Graphics g, Rectangle area, Action<SKCanvas> draw)
 	{
-		area = Rectangle.Intersect(area, new Rectangle(0, 0, 1920, 480));
+		area = Rectangle.Intersect(area, new Rectangle(0, 0, _w, _h));
 		if (area.Width <= 0 || area.Height <= 0)
 		{
 			return;

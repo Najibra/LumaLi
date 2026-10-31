@@ -58,6 +58,30 @@ internal sealed class FanCard : Card
 
 	private bool _loading;
 
+	private readonly Caption _playlistState;
+
+	private void EditPlaylist()
+	{
+		var uploads = _background.Items.Cast<string>().Where((string v) => v.Length > 0).ToList();
+		FanScreen copy = new FanScreen();
+		lock (E.Settings)
+		{
+			copy.CopyLookFrom(_fan);
+		}
+		if (!PlaylistDialog.Edit(this, copy, uploads))
+		{
+			return;
+		}
+		Change(delegate(FanScreen f)
+		{
+			f.Playlist = copy.Playlist;
+			f.Shuffle = copy.Shuffle;
+			f.PlaylistSeconds = copy.PlaylistSeconds;
+		});
+		_main.Toast(copy.HasPlaylist ? $"Playlist of {copy.Playlist.Count}{(copy.Shuffle ? ", shuffled" : "")}, each {copy.PlaylistSeconds} s" : copy.Playlist.Count == 1 ? "One upload chosen: it shows on its own" : "Playlist off");
+		RefreshValues();
+	}
+
 	public FanCard(Engine e, MainForm main, string serial, string name, FansPage page)
 		: base(name)
 	{
@@ -252,6 +276,24 @@ internal sealed class FanCard : Card
 		};
 		_c1Label = new Caption("", null, null, 90);
 		_c2Label = new Caption("", null, null, 90);
+		// the fan's number: moving it renumbers the fans (and what Identify shows) to match where they sit
+		int count = Math.Max(1, E.FanOutputs.Count > 0 ? E.FanOutputs.Count : E.Settings.Fans.Count);
+		int mine = Math.Max(0, (E.FanOutputs.Count > 0 ? E.FanOutputs.Select((OutputStatus f) => f.Serial).ToList() : E.Settings.Fans.Select((FanScreen f) => f.Serial).ToList()).FindIndex((string s) => s.Equals(serial, StringComparison.OrdinalIgnoreCase)));
+		Select position = new Select(Enumerable.Range(1, count).Select((int n) => n.ToString()), (mine + 1).ToString())
+		{
+			Width = Theme.S(100f),
+			Display = (string v) => "Fan " + v
+		};
+		position.SelectedIndexChanged += delegate
+		{
+			if (!_loading && int.TryParse(position.SelectedItem, out int to) && to != mine + 1)
+			{
+				E.MoveFan(_serial, to - 1);
+				_main.Toast($"This fan is now Fan {to}; use Identify fans to check");
+				_page.BeginInvoke(new Action(_page.Rebuild));
+			}
+		};
+		formGrid.Add("Position", position);
 		formGrid.Add("Face", _face);
 		formGrid.Add("Sensor", _sensor);
 		// the gauge's own look, for the Lottie Gauge face until a Lottie is uploaded
@@ -265,12 +307,27 @@ internal sealed class FanCard : Card
 		formGrid.Controls.Add(_c2Label);
 		formGrid.Controls.Add(_c2);
 		formGrid.Add("Rotation", _rotation);
-		formGrid.Add("Background", new Stack(horizontal: true)
+		_background.Width = Theme.S(210f);
+		formGrid.Add("Background", _background);
+		formGrid.Add("", new Stack(horizontal: true)
 		{
-			Controls = 
+			Controls =
 			{
-				(Control?)_background,
-				(Control?)new Btn("Upload", Upload, primary: false, "\ue898")
+				(Control?)new Btn("Upload", Upload, primary: false, "\ue898"),
+				(Control?)new Btn("Delete", DeleteUpload, primary: false, "\ue74d")
+			}
+		});
+		// a playlist: the background takes turns between several uploads, in order or shuffled
+		_playlistState = new Caption("", Theme.SubText, Theme.Small)
+		{
+			Margin = new Padding(Theme.S(4f), Theme.S(8f), 0, 0)
+		};
+		formGrid.Add("Playlist", new Stack(horizontal: true)
+		{
+			Controls =
+			{
+				(Control?)new Btn("Choose\u2026", EditPlaylist, primary: false, "\ue8b1"),
+				(Control?)_playlistState
 			}
 		});
 		formGrid.AddWide(_enabled);
@@ -312,11 +369,15 @@ internal sealed class FanCard : Card
 	{
 		using OpenFileDialog openFileDialog = new OpenFileDialog
 		{
-			Filter = "Images, GIFs and Lottie animations|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie"
+			Filter = "Images, GIFs, Lottie animations and videos|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.json;*.lottie;" + VideoClip.DialogPattern
 		};
 		if (openFileDialog.ShowDialog(this) == DialogResult.OK)
 		{
 			string path = Store.Import(openFileDialog.FileName);
+			if (VideoClip.IsVideo(path) && !PrepareVideo(this, _main, path))
+			{
+				return;
+			}
 			Change(delegate(FanScreen f)
 			{
 				f.Background = path;
@@ -324,6 +385,109 @@ internal sealed class FanCard : Card
 			});
 			RefreshValues();
 		}
+	}
+
+	/// <summary>
+	/// Decodes a just-uploaded video into its frames while the cursor waits, so it plays at once. False (and the file
+	/// removed again) if Windows can't decode it.
+	/// </summary>
+	internal static bool PrepareVideo(IWin32Window owner, MainForm main, string path)
+	{
+		int frames;
+		Cursor.Current = Cursors.WaitCursor;
+		main.Toast("Preparing the video…");
+		try
+		{
+			frames = VideoClip.Prepare(path);
+		}
+		catch
+		{
+			frames = 0;
+		}
+		finally
+		{
+			Cursor.Current = Cursors.Default;
+		}
+		if (frames == 0)
+		{
+			VideoClip.Forget(path);
+			try
+			{
+				File.Delete(path);
+			}
+			catch
+			{
+			}
+			MessageBox.Show(owner, "Windows couldn't play this video. MP4 (H.264) works everywhere; other formats need their codec installed.", "Video", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			return false;
+		}
+		main.Toast($"Video ready: {frames} frames" + (frames >= VideoClip.MaxSeconds * 24 ? $" (the first {VideoClip.MaxSeconds:0} seconds)" : ""));
+		return true;
+	}
+
+	/// <summary>Deletes the upload chosen in Background from the uploads folder, after asking.</summary>
+	private void DeleteUpload()
+	{
+		string path = _background.SelectedItem ?? "";
+		if (path.Length == 0)
+		{
+			_main.Toast("Choose an upload under Background first");
+			return;
+		}
+		string name = Path.GetFileName(path);
+		string? layout;
+		int fans;
+		lock (E.Settings)
+		{
+			layout = E.Layouts.FirstOrDefault((ScreenLayout l) => Same(l.Image, path) || l.Widgets.Any((Widget w) => Same(w.Image, path)))?.Name;
+			if (layout == null && Same(E.Settings.Standby?.Logo, path))
+			{
+				layout = "the standby screen";
+			}
+			fans = E.Settings.Fans.Count((FanScreen f) => Same(f.Background, path) || f.Playlist.Any((string p) => Same(p, path)));
+		}
+		if (layout != null)
+		{
+			MessageBox.Show(this, $"\"{name}\" is also used by {layout}. Remove it there first.", "Delete upload", MessageBoxButtons.OK, MessageBoxIcon.Information);
+			return;
+		}
+		string question = $"Delete \"{name}\" from your uploads?" + (fans > 1 ? $"\n\n{fans} fans use it; they go back to no background." : "");
+		if (MessageBox.Show(this, question, "Delete upload", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+		{
+			return;
+		}
+		lock (E.Settings)
+		{
+			foreach (FanScreen f in E.Settings.Fans)
+			{
+				if (Same(f.Background, path))
+				{
+					f.Background = null;
+				}
+				f.Playlist = f.Playlist.Where((string p) => !Same(p, path)).ToList();
+			}
+		}
+		E.SaveSoon();
+		_preview.Forget(path);
+		VideoClip.Forget(path);
+		try
+		{
+			if (Path.GetDirectoryName(Path.GetFullPath(path))!.Equals(Path.GetFullPath(Store.Uploads), StringComparison.OrdinalIgnoreCase))
+			{
+				File.Delete(path);
+			}
+		}
+		catch (Exception ex)
+		{
+			_main.Toast("Couldn't delete the file: " + ex.Message);
+		}
+		_page.RefreshCards();
+		_main.Toast("Deleted " + name);
+	}
+
+	private static bool Same(string? a, string b)
+	{
+		return !string.IsNullOrEmpty(a) && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
 	}
 
 	public void RefreshValues()
@@ -357,7 +521,7 @@ internal sealed class FanCard : Card
 			if (Directory.Exists(Store.Uploads))
 			{
 				_background.Items.AddRange(from f in Directory.GetFiles(Store.Uploads)
-					where new string[7] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".json", ".lottie" }.Contains(Path.GetExtension(f).ToLowerInvariant())
+					where new string[7] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".json", ".lottie" }.Contains(Path.GetExtension(f).ToLowerInvariant()) || VideoClip.IsVideo(f)
 					select f);
 			}
 		}
@@ -370,6 +534,8 @@ internal sealed class FanCard : Card
 		}
 		_background.SetSilently(_fan.Background ?? "");
 		_enabled.SetSilently(_fan.Enabled);
+		_playlistState.Text = _fan.Playlist.Count == 0 ? "off" : $"{_fan.Playlist.Count} uploads{(_fan.Shuffle ? " · shuffle" : "")} · {_fan.PlaylistSeconds} s each";
+		_background.Enabled = !_fan.HasPlaylist;
 		_loading = false;
 	}
 

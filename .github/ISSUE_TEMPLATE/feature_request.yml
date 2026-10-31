@@ -1,0 +1,23 @@
+name: Idea or request
+description: A layout, face, effect or feature you'd like
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like and how you'd use it. A picture or video of a style you like helps a lot for layouts and faces.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - 8.8" screen layout
+        - Fan screen face
+        - Fan lighting
+        - Light strip
+        - Cooling / fan speed
+        - Something else

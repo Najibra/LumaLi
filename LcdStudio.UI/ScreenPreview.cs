@@ -68,7 +68,24 @@ public sealed class ScreenPreview : Control
 		if (_frame != null)
 		{
 			graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
-			graphics.DrawImage(_frame, rect);
+			if (_frame.Height > _frame.Width)
+			{
+				// a vertical layout lies on its side here (its top to the left), as the wide card can't hold it upright
+				GraphicsState state = graphics.Save();
+				graphics.TranslateTransform(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f);
+				graphics.RotateTransform(-90f);
+				graphics.DrawImage(_frame, new RectangleF(-rect.Height / 2f, -rect.Width / 2f, rect.Height, rect.Width));
+				graphics.Restore(state);
+				string tag = "VERTICAL";
+				SizeF size = graphics.MeasureString(tag, Theme.Small);
+				RectangleF pill = new RectangleF(rect.Right - size.Width - Theme.S(14f), rect.Y + Theme.S(6f), size.Width + Theme.S(10f), size.Height + Theme.S(2f));
+				Theme.FillRound(graphics, pill, pill.Height / 2f, Color.FromArgb(170, 10, 12, 26), Color.FromArgb(120, 140, 200, 255));
+				Theme.DrawText(graphics, tag, Theme.Small, Color.FromArgb(220, 230, 240, 255), new RectangleF(pill.X + Theme.S(5f), pill.Y + Theme.S(1f), size.Width + Theme.S(2f), size.Height));
+			}
+			else
+			{
+				graphics.DrawImage(_frame, rect);
+			}
 		}
 		else
 		{

@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace LcdStudio.Core;
 
-public static class Templates
+public static partial class Templates
 {
 	private static Widget T(string text, int x, int y, int w, int h, float size, string color = "#ffffff", string align = "left", bool bold = true, string font = "Segoe UI")
 	{
@@ -145,7 +145,11 @@ public static class Templates
 			GlassTunnel(),
 			Carved(),
 			MinimalClock(),
-			FocusGpu()
+			FocusGpu(),
+			SilkTower(),
+			NeonColumn(),
+			AuroraRings(),
+			TallClock()
 		};
 	}
 

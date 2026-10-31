@@ -33,6 +33,15 @@ public sealed class ScreenLayout
 
 	public bool BuiltIn { get; set; }
 
+	/// <summary>Drawn upright for a screen stood on its end: 480 wide and 1920 tall.</summary>
+	public bool Portrait { get; set; }
+
+	[System.Text.Json.Serialization.JsonIgnore]
+	public int Width => Portrait ? 480 : 1920;
+
+	[System.Text.Json.Serialization.JsonIgnore]
+	public int Height => Portrait ? 1920 : 480;
+
 	public List<Widget> Widgets { get; set; } = new List<Widget>();
 
 

@@ -98,6 +98,56 @@ public sealed class Engine : IDisposable
 
 	public ScreenLayout CurrentLayout => Layouts.FirstOrDefault((ScreenLayout l) => l.Name == Settings.Layout) ?? Layouts[0];
 
+	/// <summary>The game profile in effect (its game is running), or null.</summary>
+	public GameProfile? ActiveGame { get; private set; }
+
+	/// <summary>What the screen shows: a running game's layout, or the chosen one. The editor still edits the chosen one.</summary>
+	public ScreenLayout ShownLayout
+	{
+		get
+		{
+			GameProfile? game = ActiveGame;
+			return (game == null ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == game.Layout)) ?? CurrentLayout;
+		}
+	}
+
+	private DateTime _gameCheck;
+
+	/// <summary>Every few seconds, whether a profiled game is running: by program name, so it costs a process lookup each.</summary>
+	private void GameTick()
+	{
+		if ((DateTime.Now - _gameCheck).TotalSeconds < 3.0)
+		{
+			return;
+		}
+		_gameCheck = DateTime.Now;
+		List<GameProfile> profiles;
+		lock (Settings)
+		{
+			profiles = Settings.GameProfiles.Where((GameProfile p) => p.Game.Length > 0 && p.Layout.Length > 0).ToList();
+		}
+		GameProfile? found = null;
+		foreach (GameProfile p in profiles)
+		{
+			Process[] running = Process.GetProcessesByName(p.Game);
+			bool any = running.Length > 0;
+			foreach (Process r in running)
+			{
+				r.Dispose();
+			}
+			if (any)
+			{
+				found = p;
+				break;
+			}
+		}
+		if (found?.Game != ActiveGame?.Game || found?.Layout != ActiveGame?.Layout)
+		{
+			Log.Write(found == null ? "game profile: back to the chosen layout" : $"game profile: {found.Game} is running, showing {found.Layout}");
+			ActiveGame = found;
+		}
+	}
+
 	public int EditVersion => Volatile.Read(ref _editVersion);
 
 	public string LightingResult { get; private set; } = "";
@@ -194,6 +244,7 @@ public sealed class Engine : IDisposable
 	public void Start()
 	{
 		StartSensorsOnly();
+		Sensors.StartGameFps();
 		Acquire();
 	}
 
@@ -228,7 +279,7 @@ public sealed class Engine : IDisposable
 			StopWorkers();
 			Released = false;
 			_run = CancellationTokenSource.CreateLinkedTokenSource(_quit.Token);
-			Devices = WinUsb.Enumerate();
+			Devices = OrderFans(WinUsb.Enumerate());
 			string[] array = CompetingProcesses();
 			Warning = ((array.Length != 0) ? (string.Join(", ", array) + " is running and may hold the devices. Close it so LumaLi can take over.") : null);
 			UsbDeviceInfo screen = Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen);
@@ -253,13 +304,13 @@ public sealed class Engine : IDisposable
 				});
 			}
 			FanOutputs.Clear();
-			foreach (UsbDeviceInfo fan in Devices.Where((UsbDeviceInfo d) => d.Kind == DeviceKind.FanLcd))
+			foreach (UsbDeviceInfo fan in Devices.Where((UsbDeviceInfo d) => WinUsb.IsFanScreen(d.Kind)))
 			{
 				OutputStatus status = new OutputStatus
 				{
 					Name = fan.Name,
 					Serial = fan.Serial,
-					Kind = DeviceKind.FanLcd,
+					Kind = fan.Kind,
 					Present = true,
 					State = "starting"
 				};
@@ -427,6 +478,79 @@ public sealed class Engine : IDisposable
 			{
 				wake.Set();
 			}
+		}
+	}
+
+	/// <summary>Fan screens in the owner's order, named Fan 1, Fan 2… in that order.</summary>
+	private List<UsbDeviceInfo> OrderFans(List<UsbDeviceInfo> devices)
+	{
+		List<string> order;
+		lock (Settings)
+		{
+			order = Settings.FanOrder.ToList();
+		}
+		int Rank(UsbDeviceInfo d)
+		{
+			int i = order.FindIndex((string s) => s.Equals(d.Serial, StringComparison.OrdinalIgnoreCase));
+			return i < 0 ? int.MaxValue : i;
+		}
+		List<UsbDeviceInfo> fans = devices.Where((UsbDeviceInfo d) => WinUsb.IsFanScreen(d.Kind)).OrderBy(Rank).ToList();
+		var result = devices.Where((UsbDeviceInfo d) => !WinUsb.IsFanScreen(d.Kind)).ToList();
+		result.AddRange(fans.Select((UsbDeviceInfo d, int i) => d with { Name = WinUsb.FanName(d.Kind, i + 1) }));
+		return result;
+	}
+
+	/// <summary>Puts a fan screen at a position (0 is Fan 1) and renumbers the fans, keeping each fan's look.</summary>
+	public void MoveFan(string serial, int position)
+	{
+		lock (Settings)
+		{
+			List<string> serials = FanOutputs.Count > 0 ? FanOutputs.Select((OutputStatus f) => f.Serial).ToList() : Settings.Fans.Select((FanScreen f) => f.Serial).ToList();
+			int at = serials.FindIndex((string s) => s.Equals(serial, StringComparison.OrdinalIgnoreCase));
+			if (at < 0)
+			{
+				return;
+			}
+			serials.RemoveAt(at);
+			serials.Insert(Math.Clamp(position, 0, serials.Count), serial);
+			Settings.FanOrder = serials;
+			// keeps Settings.Fans in the same order, for when no fan is connected
+			Settings.Fans = Settings.Fans.OrderBy((FanScreen f) =>
+			{
+				int i = serials.FindIndex((string s) => s.Equals(f.Serial, StringComparison.OrdinalIgnoreCase));
+				return i < 0 ? int.MaxValue : i;
+			}).ToList();
+			List<OutputStatus> sorted = FanOutputs.OrderBy((OutputStatus f) => serials.FindIndex((string s) => s.Equals(f.Serial, StringComparison.OrdinalIgnoreCase))).ToList();
+			FanOutputs.Clear();
+			for (int i = 0; i < sorted.Count; i++)
+			{
+				sorted[i].Name = $"Fan {i + 1}";
+				FanOutputs.Add(sorted[i]);
+			}
+			Devices = OrderFans(Devices);
+		}
+		SaveSoon();
+		Notify();
+	}
+
+	private string? _rgbIdentify;
+
+	private DateTime _rgbIdentifyUntil;
+
+	/// <summary>Lights each fan of a wireless group in its own colour for a few seconds, to work out their order.</summary>
+	public void IdentifyGroup(string groupId, TimeSpan duration)
+	{
+		_rgbIdentify = groupId;
+		_rgbIdentifyUntil = DateTime.Now + duration;
+		_lightingDirty = true;
+	}
+
+	private void IdentifyTick()
+	{
+		if (_rgbIdentify != null && DateTime.Now > _rgbIdentifyUntil)
+		{
+			_rgbIdentify = null;
+			_lightingDirty = true;
 		}
 	}
 
@@ -693,13 +817,14 @@ public sealed class Engine : IDisposable
 					}
 					ScreenLayout screenLayout;
 					standby = StandbyNow();
+					GameTick();
 					lock (Settings)
 					{
-						screenLayout = standby ? StandbyLayout() : CurrentLayout.Clone();
+						screenLayout = standby ? StandbyLayout() : ShownLayout.Clone();
 					}
 					int brightness = standby ? Math.Min(Settings.ScreenBrightness, Settings.Standby.Brightness) : Settings.ScreenBrightness;
 					bool flag = ScreenRenderer.IsAnimated(screenLayout);
-					string text2 = (flag ? null : string.Join("|", Sensors.Version, EditVersion, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
+					string text2 = (flag ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
 					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < 2.0)
 					{
 						Wait(ct, 100, wake);
@@ -718,9 +843,30 @@ public sealed class Engine : IDisposable
 						// the light strip, when it matches the screen, takes its colours from this frame as drawn
 						if (Settings.Lighting.StripMatchesScreen && Strip.Present)
 						{
-							_screenGlow = Lighting.FromScreen(bitmap, StripLeds);
+							if (screenLayout.Portrait)
+							{
+								// the strip runs along the screen as it sits in landscape, so it reads a vertical frame turned back
+								using Bitmap wide = (Bitmap)bitmap.Clone();
+								wide.RotateFlip(Settings.Flip ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
+								_screenGlow = Lighting.FromScreen(wide, StripLeds);
+							}
+							else
+							{
+								_screenGlow = Lighting.FromScreen(bitmap, StripLeds);
+							}
 						}
-						bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
+						// the panel itself is 480 × 1920: a wide frame turns a quarter, a vertical one is already upright
+						if (screenLayout.Portrait)
+						{
+							if (Settings.Flip)
+							{
+								bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
+							}
+						}
+						else
+						{
+							bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
+						}
 						array2 = Imaging.Jpeg(bitmap, Settings.ScreenQuality);
 						timing.Render += Stopwatch.GetElapsedTime(r0, r1).TotalMilliseconds;
 						timing.Encode += Stopwatch.GetElapsedTime(r1).TotalMilliseconds;
@@ -902,7 +1048,7 @@ public sealed class Engine : IDisposable
 	{
 		using Faces faces = new Faces();
 		AutoResetEvent wake = NewWake();
-		LcdLink lcdLink = null;
+		IFanLink? lcdLink = null;
 		FpsCounter fpsCounter = new FpsCounter();
 		int num = 500;
 		string text = null;
@@ -942,7 +1088,7 @@ public sealed class Engine : IDisposable
 					}
 					if (lcdLink == null)
 					{
-						lcdLink = new LcdLink(info);
+						lcdLink = info.Kind == DeviceKind.TlLcd ? new TlLcdLink(info) : new LcdLink(info);
 					}
 					bool flag;
 					lock (_identifyUntil)
@@ -959,16 +1105,9 @@ public sealed class Engine : IDisposable
 					FanScreen fanScreen2;
 					lock (Settings)
 					{
-						fanScreen2 = new FanScreen
-						{
-							Face = fanScreen.Face,
-							Sensor = fanScreen.Sensor,
-							Label = fanScreen.Label,
-							Color1 = fanScreen.Color1,
-							Color2 = fanScreen.Color2,
-							Rotation = fanScreen.Rotation,
-							Background = fanScreen.Background
-						};
+						// every setting the face draws with (playlist, gauge style, warning level too), copied so the
+						// card can change them while this frame draws
+						fanScreen2 = fanScreen.Snapshot();
 					}
 					if (Faces.IsAnimated(fanScreen2))
 					{
@@ -1198,7 +1337,8 @@ public sealed class Engine : IDisposable
 						lastGroupIds = text;
 					}
 					ReactTick();
-					if (_lightingDirty && Settings.Lighting.Applied)
+					IdentifyTick();
+					if (_lightingDirty && (Settings.Lighting.Applied || _rgbIdentify != null))
 					{
 						_lightingDirty = false;
 						ApplyLighting(wirelessHub);
@@ -1270,8 +1410,18 @@ public sealed class Engine : IDisposable
 			try
 			{
 				(List<(byte R, byte G, byte B)[]> Frames, int Ticks) tuple = Lighting.FanLoop(text, s, list[i].FanCount, list[i].LedsPerFan);
-				List<(byte, byte, byte)[]> item = tuple.Frames;
+				string? orderText;
+				lock (Settings)
+				{
+					Settings.Lighting.GroupOrders.TryGetValue(list[i].Id, out orderText);
+				}
+				List<(byte, byte, byte)[]> item = Lighting.Reorder(tuple.Frames, list[i].LedsPerFan, Lighting.ParseOrder(orderText, list[i].FanCount));
 				int item2 = tuple.Ticks;
+				if (_rgbIdentify == list[i].Id)
+				{
+					item = Lighting.IdentifyFrame(list[i].FanCount, list[i].LedsPerFan);
+					item2 = 8000;
+				}
 				dictionary[i] = (Array.Empty<byte>(), item, item2);
 			}
 			catch (Exception ex)

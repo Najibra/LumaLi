@@ -486,6 +486,80 @@ public static class Lighting
 		return most;
 	}
 
+	/// <summary>
+	/// The order "2,1,3" as zero-based controller fan indices, one per position, or null if it isn't a full ordering of
+	/// the group's fans (then the controller's own order is used).
+	/// </summary>
+	public static int[]? ParseOrder(string? text, int fans)
+	{
+		if (string.IsNullOrWhiteSpace(text))
+		{
+			return null;
+		}
+		string[] parts = text.Split(new[] { ',', ' ', '-', '>' }, StringSplitOptions.RemoveEmptyEntries);
+		if (parts.Length != fans)
+		{
+			return null;
+		}
+		int[] order = new int[fans];
+		for (int i = 0; i < fans; i++)
+		{
+			if (!int.TryParse(parts[i], out int n) || n < 1 || n > fans)
+			{
+				return null;
+			}
+			order[i] = n - 1;
+		}
+		return order.Distinct().Count() == fans ? order : null;
+	}
+
+	/// <summary>
+	/// Moves each fan's ring so the effect's k-th fan lights the fan that sits k-th: the controller's fan order[k]
+	/// shows ring k.
+	/// </summary>
+	public static List<(byte R, byte G, byte B)[]> Reorder(List<(byte R, byte G, byte B)[]> frames, int perRing, int[]? order)
+	{
+		if (order == null || order.Select((int v, int i) => v == i).All((bool same) => same))
+		{
+			return frames;
+		}
+		var result = new List<(byte, byte, byte)[]>(frames.Count);
+		foreach ((byte, byte, byte)[] f in frames)
+		{
+			var o = new (byte, byte, byte)[f.Length];
+			for (int k = 0; k < order.Length; k++)
+			{
+				int src = k * perRing, dst = order[k] * perRing;
+				if (src + perRing <= f.Length && dst + perRing <= o.Length)
+				{
+					Array.Copy(f, src, o, dst, perRing);
+				}
+			}
+			result.Add(o);
+		}
+		return result;
+	}
+
+	/// <summary>Colours that tell the fans of a group apart: controller fan 1 red, 2 green, 3 blue, 4 yellow.</summary>
+	public static readonly (string Name, Color Color)[] IdentifyColors =
+	{
+		("red", Color.FromArgb(255, 0, 0)), ("green", Color.FromArgb(0, 255, 0)), ("blue", Color.FromArgb(0, 60, 255)), ("yellow", Color.FromArgb(255, 200, 0))
+	};
+
+	public static List<(byte R, byte G, byte B)[]> IdentifyFrame(int fans, int perRing)
+	{
+		var f = new (byte, byte, byte)[fans * perRing];
+		for (int i = 0; i < fans; i++)
+		{
+			Color c = IdentifyColors[i % IdentifyColors.Length].Color;
+			for (int j = 0; j < perRing; j++)
+			{
+				f[i * perRing + j] = (c.R, c.G, c.B);
+			}
+		}
+		return new List<(byte, byte, byte)[]> { f };
+	}
+
 	public static (List<(byte R, byte G, byte B)[]> Frames, int Ticks) FanLoop(string effect, EffectSettings s, int fans, int perRing = 26)
 	{
 		int num = fans * perRing;

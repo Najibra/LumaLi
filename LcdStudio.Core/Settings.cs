@@ -44,6 +44,12 @@ public sealed class Settings
 
 	public List<FanScreen> Fans { get; set; } = new List<FanScreen>();
 
+	/// <summary>Layouts the screen switches to while a chosen game runs, and back when it closes.</summary>
+	public List<GameProfile> GameProfiles { get; set; } = new List<GameProfile>();
+
+	/// <summary>Fan screens' serials in the order the owner set (Fan 1 first); fans not listed follow in serial order.</summary>
+	public List<string> FanOrder { get; set; } = new List<string>();
+
 
 	public LightingSettings Lighting { get; set; } = new LightingSettings();
 

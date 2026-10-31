@@ -55,13 +55,27 @@ public sealed class WinUsb : IDisposable
 		public byte Interval;
 	}
 
-	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[5]
+	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[7]
 	{
 		("vid_1cbe&pid_a088", DeviceKind.Screen),
 		("vid_0416&pid_8050", DeviceKind.ScreenLeds),
 		("vid_1cbe&pid_0006", DeviceKind.FanLcd),
 		("vid_0416&pid_8040", DeviceKind.WirelessTx),
-		("vid_0416&pid_8041", DeviceKind.WirelessRx)
+		("vid_0416&pid_8041", DeviceKind.WirelessRx),
+		// experimental: not tried on real hardware yet (per sgtaziz/lian-li-linux, the 8.8" screen's protocol at 400 × 400)
+		("vid_1cbe&pid_a018", DeviceKind.FlexLcd),
+		("vid_1cbe&pid_a019", DeviceKind.FlexLcd)
+	};
+
+	/// <summary>Fan screens of either kind: the wireless LCD fans and the Flex LCDs.</summary>
+	public static bool IsFanScreen(DeviceKind k) => k == DeviceKind.FanLcd || k == DeviceKind.FlexLcd || k == DeviceKind.TlLcd;
+
+	/// <summary>The name a fan screen goes by: its number, and its type when it isn't a wireless LCD fan.</summary>
+	public static string FanName(DeviceKind k, int number) => k switch
+	{
+		DeviceKind.FlexLcd => $"Fan {number} (Flex LCD)",
+		DeviceKind.TlLcd => $"Fan {number} (wired TL LCD)",
+		_ => $"Fan {number}"
 	};
 
 	private const uint PipeTransferTimeout = 3u;
@@ -139,7 +153,8 @@ public sealed class WinUsb : IDisposable
 			string[] subKeyNames = registryKey.GetSubKeyNames();
 			foreach (string id in subKeyNames)
 			{
-				if (!Known.Any(((string Id, DeviceKind Kind) k) => k.Id == id.ToLowerInvariant()))
+				// a composite device lists each interface as its own key ("…&pid_a019&mi_00"), so match the start
+				if (!Known.Any(((string Id, DeviceKind Kind) k) => id.ToLowerInvariant() == k.Id || id.ToLowerInvariant().StartsWith(k.Id + "&mi_")))
 				{
 					continue;
 				}
@@ -217,6 +232,17 @@ public sealed class WinUsb : IDisposable
 				SetupDiDestroyDeviceInfoList(num);
 			}
 		}
+		// the wired TL LCD fans are HID devices: the collection with 512-byte reports carries the pictures
+		try
+		{
+			foreach (string hid in HidPort.Find("vid_04fc&pid_7393", 512))
+			{
+				list.Add(new UsbDeviceInfo(DeviceKind.TlLcd, hid, SerialOf(hid), ""));
+			}
+		}
+		catch (Exception)
+		{
+		}
 		List<UsbDeviceInfo> source = list.OrderBy((UsbDeviceInfo d) => d.Kind).ThenBy<UsbDeviceInfo, string>((UsbDeviceInfo d) => d.Serial, StringComparer.OrdinalIgnoreCase).ToList();
 		int fan = 0;
 		// fans are named by serial order, so the same fan keeps the same name between runs
@@ -226,7 +252,7 @@ public sealed class WinUsb : IDisposable
 			{
 				DeviceKind.Screen => "Universal Screen 8.8\"",
 				DeviceKind.ScreenLeds => "Screen light strip",
-				DeviceKind.FanLcd => $"Fan {++fan}",
+				DeviceKind.FanLcd or DeviceKind.FlexLcd or DeviceKind.TlLcd => FanName(d.Kind, ++fan),
 				DeviceKind.WirelessTx => "Wireless transmitter",
 				_ => "Wireless receiver",
 			}

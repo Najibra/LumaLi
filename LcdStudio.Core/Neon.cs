@@ -170,7 +170,9 @@ public sealed partial class ScreenRenderer
 	private void DrawGlowText(Graphics g, Widget w, RectangleF r, string text, Color color)
 	{
 		Color halo = w.Color2.Length > 0 ? Imaging.Hex(w.Color2, color) : color;
-		using var path = new GraphicsPath();
+		// winding fill: Bahnschrift's outlines overlap (it is a variable font), and the default even-odd fill cuts
+		// square notches where they do, as in the 4
+		using var path = new GraphicsPath(FillMode.Winding);
 		using var format = new StringFormat { Alignment = Align(w.Align), LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip };
 		FontFamily family;
 		try
@@ -186,8 +188,9 @@ public sealed partial class ScreenRenderer
 			FontStyle style = w.Bold && family.IsStyleAvailable(FontStyle.Bold) ? FontStyle.Bold : FontStyle.Regular;
 			path.AddString(text, family, (int)style, w.Size, r, format);
 		}
-		float[] widths = { w.Size * 0.32f, w.Size * 0.18f, w.Size * 0.08f };
-		int[] alphas = { 22, 40, 70 };
+		// six fine steps rather than three, so the halo fades smoothly even round very large numerals
+		float[] widths = { w.Size * 0.32f, w.Size * 0.25f, w.Size * 0.19f, w.Size * 0.14f, w.Size * 0.095f, w.Size * 0.055f };
+		int[] alphas = { 11, 13, 17, 22, 30, 44 };
 		for (int i = 0; i < widths.Length; i++)
 		{
 			using var pen = new Pen(Color.FromArgb(alphas[i], halo), Math.Max(2f, widths[i])) { LineJoin = LineJoin.Round };

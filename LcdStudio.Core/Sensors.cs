@@ -32,7 +32,7 @@ public sealed class Sensors : IDisposable
 		public ulong Extended;
 	}
 
-	public static readonly SensorDef[] Catalog = new SensorDef[19]
+	public static readonly SensorDef[] Catalog = new SensorDef[20]
 	{
 		new SensorDef("cpu.load", "CPU load", "%", 0f, 100f),
 		new SensorDef("cpu.temp", "CPU temperature", "°C", 20f, 95f),
@@ -52,7 +52,8 @@ public sealed class Sensors : IDisposable
 		new SensorDef("net.down", "Download", "MB/s", 0f, 100f),
 		new SensorDef("net.up", "Upload", "MB/s", 0f, 50f),
 		new SensorDef("fans.rpm", "Case fan speed", "RPM", 0f, 3000f),
-		new SensorDef("fans.duty", "Case fan duty", "%", 0f, 100f)
+		new SensorDef("fans.duty", "Case fan duty", "%", 0f, 100f),
+		new SensorDef("game.fps", "Game frame rate", "FPS", 0f, 240f)
 	};
 
 	private const int HistoryLength = 120;
@@ -64,6 +65,11 @@ public sealed class Sensors : IDisposable
 	private readonly ConcurrentDictionary<string, string> _text = new ConcurrentDictionary<string, string>();
 
 	private Computer? _pc;
+
+	private GameFps? _fps;
+
+	/// <summary>Where the game frame rate comes from: "Windows", or "none" (then only RTSS, when it runs).</summary>
+	public string GameFpsSource => _fps?.Source ?? "none";
 
 	private long _lastRx;
 
@@ -124,6 +130,34 @@ public sealed class Sensors : IDisposable
 		}
 		_text.TryAdd("gpu.name", "Graphics");
 		_text.TryAdd("cpu.name", "Processor");
+	}
+
+	/// <summary>Starts counting game frames. Only the full app does this, so a render or test run never takes over its trace.</summary>
+	public void StartGameFps()
+	{
+		_fps ??= new GameFps();
+		_fps.Start();
+	}
+
+	private void GameFrameRate()
+	{
+		float? fps = null;
+		try
+		{
+			fps = (_fps ?? (_fps = new GameFps())).Read();
+		}
+		catch
+		{
+		}
+		if (fps.HasValue && fps.Value > 0f && fps.Value < 2000f)
+		{
+			Set("game.fps", fps.Value);
+		}
+		else if (Age("game.fps") > 3.0)
+		{
+			// a short gap keeps the last reading; it goes only once the game has stopped drawing for a few seconds
+			Remove("game.fps");
+		}
 	}
 
 	private static string Shorten(string s)
@@ -261,6 +295,7 @@ public sealed class Sensors : IDisposable
 			WindowsMemory();
 		}
 		Network();
+		GameFrameRate();
 		_text["uptime"] = Uptime();
 	}
 
@@ -416,6 +451,7 @@ public sealed class Sensors : IDisposable
 
 	public void Dispose()
 	{
+		_fps?.Dispose();
 		try
 		{
 			_pc?.Close();
