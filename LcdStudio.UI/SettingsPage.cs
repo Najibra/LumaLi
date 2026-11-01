@@ -119,11 +119,17 @@ public sealed class SettingsPage : Page
 						(Control?)new Btn("Rescan", delegate
 						{
 							E.Acquire();
-						}, primary: false, "\ue72c"),
-						(Control?)new Btn("Restart stuck devices", RestartStuck, primary: false, "\ue7ba")
+						}, primary: false, "\ue72c")
 					}
 				},
-				(Control?)new Btn("Copy device report", CopyReport, primary: false, "\ue8c8")
+				(Control?)new Stack(horizontal: true)
+				{
+					Controls =
+					{
+						(Control?)new Btn("Restart stuck devices", RestartStuck, primary: false, "\ue7ba"),
+						(Control?)new Btn("Copy device report", CopyReport, primary: false, "\ue8c8")
+					}
+				}
 			}
 		});
 		Card card2 = AddCard("8.8\" screen", 530);
@@ -284,6 +290,7 @@ public sealed class SettingsPage : Page
 			}
 		});
 		BuildGameRows();
+		BuildSmartCard(settings);
 		AddCard("About", 1074).Controls.Add(new Stack
 		{
 			Controls = 
@@ -305,6 +312,97 @@ public sealed class SettingsPage : Page
 						})
 					}
 				}
+			}
+		});
+	}
+
+	private Caption _smartState = null!;
+
+	private Caption _healthState = null!;
+
+	/// <summary>
+	/// Smart: auto mode (a layout and a fan lighting effect for gaming, watching and working), the strip and fans
+	/// taking the monitor's colours, and the health watch.
+	/// </summary>
+	private void BuildSmartCard(Settings settings)
+	{
+		SmartSettings smart = settings.Smart;
+		Card card = AddCard("Smart", 1074);
+		Caption Note(string text, int height = 24) => new Caption(text, Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(height)) };
+		Toggle auto = new Toggle("Auto mode: switch the screen and fan lighting by what the PC is doing", smart.AutoMode);
+		auto.CheckedChanged += delegate
+		{
+			Change(delegate(Settings x) { x.Smart.AutoMode = auto.Checked; });
+			E.LightingChanged();
+		};
+		string keep = "(keep my choice)";
+		string[] layouts = new[] { keep }.Concat(E.VisibleLayouts().Select((ScreenLayout l) => l.Name)).ToArray();
+		string[] effects = new[] { keep }.Concat(Lighting.Effects).ToArray();
+		FormGrid grid = new FormGrid(150);
+		foreach (string activity in LcdStudio.Core.Activity.All)
+		{
+			string a = activity;
+			string layoutNow = smart.LayoutFor(a), effectNow = smart.EffectFor(a);
+			Select layout = new Select(layouts, layoutNow.Length > 0 && layouts.Contains(layoutNow) ? layoutNow : keep) { Width = Theme.S(300f) };
+			Select effect = new Select(effects, effectNow.Length > 0 && effects.Contains(effectNow) ? effectNow : keep) { Width = Theme.S(230f) };
+			layout.SelectedIndexChanged += delegate
+			{
+				string v = layout.SelectedItem?.ToString() ?? keep;
+				v = v == keep ? "" : v;
+				Change(delegate(Settings x)
+				{
+					switch (a)
+					{
+					case LcdStudio.Core.Activity.Gaming: x.Smart.GamingLayout = v; break;
+					case LcdStudio.Core.Activity.Watching: x.Smart.WatchingLayout = v; break;
+					default: x.Smart.WorkingLayout = v; break;
+					}
+				});
+			};
+			effect.SelectedIndexChanged += delegate
+			{
+				string v = effect.SelectedItem?.ToString() ?? keep;
+				v = v == keep ? "" : v;
+				Change(delegate(Settings x)
+				{
+					switch (a)
+					{
+					case LcdStudio.Core.Activity.Gaming: x.Smart.GamingEffect = v; break;
+					case LcdStudio.Core.Activity.Watching: x.Smart.WatchingEffect = v; break;
+					default: x.Smart.WorkingEffect = v; break;
+					}
+				});
+				E.LightingChanged();
+			};
+			string label = a switch { LcdStudio.Core.Activity.Gaming => "Gaming", LcdStudio.Core.Activity.Watching => "Watching a video", _ => "Everything else" };
+			grid.Add(label, new Stack(horizontal: true) { Controls = { (Control?)layout, (Control?)effect } });
+		}
+		Toggle strip = new Toggle("Light strip flows through the main colours on your monitor", smart.StripFollowsMonitor);
+		strip.CheckedChanged += delegate { Change(delegate(Settings x) { x.Smart.StripFollowsMonitor = strip.Checked; }); };
+		Toggle fans = new Toggle("Fan lights take the main colours on your monitor", smart.FansFollowMonitor);
+		fans.CheckedChanged += delegate
+		{
+			Change(delegate(Settings x) { x.Smart.FansFollowMonitor = fans.Checked; });
+			E.LightingChanged();
+		};
+		Toggle health = new Toggle("Health watch: warn when the PC runs warmer than it used to (dust) or a fan slows down", smart.HealthWatch);
+		health.CheckedChanged += delegate { Change(delegate(Settings x) { x.Smart.HealthWatch = health.Checked; }); };
+		_smartState = new Caption("", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(22f)) };
+		_healthState = new Caption("", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(66f)) };
+		card.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)auto,
+				(Control?)Note("Gaming is a game drawing frames in front (needs administrator, like the frame rate); watching is a player or browser full screen. A change waits 5 seconds, and a game profile still comes first. For each: a layout, then a fan lighting effect."),
+				(Control?)grid,
+				(Control?)_smartState,
+				(Control?)strip,
+				(Control?)fans,
+				(Control?)Note("The monitor is sampled every 2 seconds, on this PC only. The fans keep their effect and take the new colours at most every 30 seconds, because each change is sent to them again."),
+				(Control?)health,
+				(Control?)_healthState,
+				(Control?)Note("Screen layouts can show the busiest app with {top.app} and its share of the processor with {top.cpu:0}%.")
 			}
 		});
 	}
@@ -685,6 +783,22 @@ public sealed class SettingsPage : Page
 		if (_gameState.Text != state)
 		{
 			_gameState.Text = state;
+		}
+		string smart = $"Now: {E.CurrentActivity.ToLowerInvariant()}" + (E.Settings.Smart.AutoMode ? $", showing {E.ShownLayout.Name} with {E.FanEffectNow(E.Settings.Lighting)} on the fans." : " (auto mode is off).");
+		var palette = E.MonitorPalette;
+		if (palette != null && (E.Settings.Smart.StripFollowsMonitor || E.Settings.Smart.FansFollowMonitor))
+		{
+			smart += $"  Monitor colours: {MonitorColors.Hex(palette[0])}, {MonitorColors.Hex(palette[1])}.";
+		}
+		if (_smartState.Text != smart)
+		{
+			_smartState.Text = smart;
+		}
+		string healthText = !E.Settings.Smart.HealthWatch ? "" : E.HealthNotes.Count > 0 ? "⚠ " + string.Join("  ⚠ ", E.HealthNotes) : E.HealthSummary;
+		if (_healthState.Text != healthText)
+		{
+			_healthState.Text = healthText;
+			_healthState.ForeColor = E.HealthNotes.Count > 0 ? Theme.Warn : Theme.SubText;
 		}
 	}
 

@@ -41,17 +41,18 @@ public sealed class Btn : NavyControl
 		PaintParent(graphics);
 		Theme.Smooth(graphics);
 		RectangleF r = new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f);
-		Color fill = ((!base.Enabled) ? Color.FromArgb(40, 50, 100) : ((!Primary) ? (Down ? Theme.Field : (Hot ? Theme.Hover : Color.FromArgb(46, 62, 140))) : (Down ? Color.FromArgb(30, 100, 220) : (Hot ? Color.FromArgb(70, 145, 255) : Theme.Accent))));
-		Theme.FillRound(graphics, r, Theme.S(8f), fill, Primary ? null : new Color?(Theme.FieldEdge));
+		Color fill = ((!base.Enabled) ? Theme.Card : ((!Primary) ? (Down ? Theme.CardEdge : (Hot ? Theme.Hover : Theme.Field)) : (Down ? Color.FromArgb(205, 205, 208) : (Hot ? Color.White : Theme.PrimaryFill))));
+		Theme.FillRound(graphics, r, Theme.S(8f), fill, (Primary && base.Enabled) ? null : new Color?(Hot ? Theme.FieldEdge : Theme.CardEdge));
+		Color ink = !base.Enabled ? Theme.Faint : (Primary ? Theme.PrimaryText : Theme.Text);
 		float num = Theme.S(12f);
 		if (Icon != null)
 		{
-			Theme.DrawText(graphics, Icon, Theme.Icons, base.Enabled ? Theme.Text : Theme.Faint, new RectangleF(num - (float)Theme.S(2f), 0f, Theme.S(22f), base.Height), StringAlignment.Center);
+			Theme.DrawText(graphics, Icon, Theme.Icons, ink, new RectangleF(num - (float)Theme.S(2f), 0f, Theme.S(22f), base.Height), StringAlignment.Center);
 			num += (float)Theme.S(20f);
 		}
 		if (Text.Length > 0)
 		{
-			Theme.DrawText(graphics, Text, Primary ? Theme.BodyBold : Font, base.Enabled ? Theme.Text : Theme.Faint, new RectangleF(num, 0f, (float)base.Width - num - (float)Theme.S(10f), base.Height), (Icon == null) ? StringAlignment.Center : StringAlignment.Near);
+			Theme.DrawText(graphics, Text, Primary ? Theme.BodyBold : Font, ink, new RectangleF(num, 0f, (float)base.Width - num - (float)Theme.S(10f), base.Height), (Icon == null) ? StringAlignment.Center : StringAlignment.Near);
 		}
 	}
 

@@ -243,6 +243,10 @@ public sealed partial class ScreenRenderer : IDisposable
 				case "lightbeam":
 				case "lightbeam-skia":
 				case "standby":
+				case "mission":
+				case "interstellar":
+				case "interstellar-micro":
+				case "airframe":
 					flag3 = true;
 					break;
 				default:
@@ -341,6 +345,33 @@ public sealed partial class ScreenRenderer : IDisposable
 	}
 
 	private void DrawWidget(Graphics g, Widget w, double t)
+	{
+		float z = w.Zoom ?? 1f;
+		if (Math.Abs(z - 1f) < 0.001f || z <= 0.05f)
+		{
+			DrawWidgetAt(g, w, t);
+			return;
+		}
+		// drawn at its designed size, then scaled: tiles laid out in fixed pixels fit a smaller box intact
+		(int X, int Y, int W, int H) box = (w.X, w.Y, w.W, w.H);
+		GraphicsState state = g.Save();
+		try
+		{
+			g.ScaleTransform(z, z);
+			w.X = (int)Math.Round(box.X / z);
+			w.Y = (int)Math.Round(box.Y / z);
+			w.W = (int)Math.Round(box.W / z);
+			w.H = (int)Math.Round(box.H / z);
+			DrawWidgetAt(g, w, t);
+		}
+		finally
+		{
+			(w.X, w.Y, w.W, w.H) = box;
+			g.Restore(state);
+		}
+	}
+
+	private void DrawWidgetAt(Graphics g, Widget w, double t)
 	{
 		if (!w.Visible || w.W < 2 || w.H < 2 || (w.HideWhenMissing && Missing(w)))
 		{
@@ -569,65 +600,11 @@ public sealed partial class ScreenRenderer : IDisposable
 			g.Clear(color);
 			break;
 		case "grid":
-		{
-			using (LinearGradientBrush brush3 = new LinearGradientBrush(rectangleF, color, color2, 90f))
-			{
-				g.FillRectangle(brush3, rectangleF);
-			}
-			float num5 = 249.59999f;
-			using (LinearGradientBrush brush4 = new LinearGradientBrush(new RectangleF(810f, num5 - 260f, 300f, 262f), Color.FromArgb(255, 230, 90), Color.FromArgb(255, 60, 160), 90f))
-			{
-				GraphicsState gstate = g.Save();
-				g.SetClip(new RectangleF(0f, 0f, 1920f, num5));
-				g.FillEllipse(brush4, 810f, num5 - 150f, 300f, 300f);
-				using SolidBrush brush5 = new SolidBrush(color2);
-				for (int k = 0; k < 6; k++)
-				{
-					g.FillRectangle(brush5, 800f, num5 - 70f + (float)(k * 13), 320f, 3 + k);
-				}
-				g.Restore(gstate);
-			}
-			using (SolidBrush brush6 = new SolidBrush(Imaging.Mix(color, Color.Black, 0.4)))
-			{
-				g.FillRectangle(brush6, 0f, num5, 1920f, 480f - num5);
-			}
-			using Pen pen2 = new Pen(Imaging.WithAlpha(color3, 200), 2f);
-			double num6 = t * 0.6 % 1.0;
-			for (int m = 0; m < 14; m++)
-			{
-				double num7 = ((double)m + num6) / 14.0;
-				float num8 = num5 + (float)(num7 * num7 * (double)(480f - num5));
-				g.DrawLine(pen2, 0f, num8, 1920f, num8);
-			}
-			for (int n = -24; n <= 24; n++)
-			{
-				g.DrawLine(pen2, 960f + (float)(n * 22), num5, 960f + (float)(n * 260), 480f);
-			}
+			GridSkia(g, color, color2, color3, t);
 			break;
-		}
 		case "waves":
-		{
-			using (LinearGradientBrush brush8 = new LinearGradientBrush(rectangleF, color, color2, 0f))
-			{
-				g.FillRectangle(brush8, rectangleF);
-			}
-			for (int num10 = 0; num10 < 5; num10++)
-			{
-				List<PointF> list = new List<PointF>();
-				float num11 = 480f * (0.45f + (float)num10 * 0.12f);
-				for (int num12 = 0; num12 <= 1920; num12 += 24)
-				{
-					list.Add(new PointF(num12, num11 + (float)(Math.Sin((double)num12 / 140.0 + t * (1.0 + (double)num10 * 0.3) + (double)num10) * 26.0 + Math.Sin((double)num12 / 63.0 - t * 1.7) * 9.0)));
-				}
-				list.Add(new PointF(1920f, 480f));
-				list.Add(new PointF(0f, 480f));
-				using GraphicsPath graphicsPath2 = new GraphicsPath();
-				graphicsPath2.AddPolygon(list.ToArray());
-				using SolidBrush brush9 = new SolidBrush(Imaging.WithAlpha(Imaging.Mix(color3, color2, (double)num10 / 5.0), 70));
-				g.FillPath(brush9, graphicsPath2);
-			}
+			WavesSkia(g, color, color2, color3, t);
 			break;
-		}
 		case "tunnel":
 			TunnelSkia(g, color, color2, color3, t);
 			break;

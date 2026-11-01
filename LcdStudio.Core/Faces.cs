@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.Linq;
+using SkiaSharp;
 
 namespace LcdStudio.Core;
 
@@ -14,14 +15,38 @@ public sealed partial class Faces : IDisposable
 	private sealed record FaceContext(Graphics G, FanScreen Fan, string Value, float Fraction, string Label, Color C1, Color C2, double T)
 	{
 		public string Time => DateTime.Now.ToString("HH:mm");
+
+		/// <summary>The fan's background (picture, GIF, Lottie or video) is already drawn: the face leaves out its own backdrop.</summary>
+		public bool Over { get; init; }
 	}
+
+	/// <summary>Faces that are a whole picture in themselves (stone, paper, their own light), which keep it over any background.</summary>
+	public static readonly HashSet<string> OwnBackdrop = new HashSet<string> { "Carved", "Deer", "Headline", "Lightbeam", "Airframe", "Analog Dial" };
+
+	/// <summary>Whether this face shows the fan's background behind it.</summary>
+	public static bool TakesBackground(string face) => !OwnBackdrop.Contains(face);
+
+	/// <summary>A GDI face's backdrop: its own colour, or nothing when the fan's background shows through.</summary>
+	private static void Backdrop(FaceContext x, Color color)
+	{
+		if (!x.Over)
+		{
+			x.G.Clear(color);
+		}
+	}
+
+	/// <summary>A Skia face's backdrop colour: clear when the fan's background shows through.</summary>
+	private static SKColor Back(FaceContext x, SKColor color) => x.Over ? SKColors.Transparent : color;
+
+	/// <summary>Set for the face being drawn, so its Skia layer is laid over the background rather than replacing it.</summary>
+	private bool _faceOver;
 
 	public const int Size = 400;
 
 	public static readonly string[] Names =
 	{
 		"Glass Slab", "Fading", "Molten Glass", "Neon Ring", "Dot Matrix", "Carved", "Liquid", "Reactor", "3D Number", "Light on Text",
-		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Lottie Gauge", "Image / GIF"
+		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Mission Control", "Interstellar", "Airframe", "Dot Time", "Rolling Time", "Analog Dial", "Lottie Gauge", "Image / GIF"
 	};
 
 	private readonly Dictionary<string, Image?> _images = new Dictionary<string, Image>();
@@ -76,6 +101,12 @@ public sealed partial class Faces : IDisposable
 			"Gap" => (First: "Ink", Second: "Page"),
 			"Headline" => (First: "Paint", Second: "Ink"),
 			"Lightbeam" => (First: "Crest", Second: "Flanks"),
+			"Mission Control" => (First: "Calm", Second: "Busy"),
+			"Interstellar" => (First: "Light", Second: "Dust"),
+			"Airframe" => (First: "Ink", Second: "Accent"),
+			"Dot Time" => (First: "Dots", Second: "Accent"),
+			"Rolling Time" => (First: "Text", Second: "Accent"),
+			"Analog Dial" => (First: "Dial", Second: "Accent"),
 			"Lottie Gauge" => (First: "Start", Second: "End"),
 			_ => (First: "Text", Second: "Tint"), 
 		};
@@ -104,6 +135,12 @@ public sealed partial class Faces : IDisposable
 			"Gap" => ("#0e0e0e", "#f6f5f1"),
 			"Headline" => ("#d02a42", "#1d2b52"),
 			"Lightbeam" => ("#ffece0", "#9aa6f2"),
+			"Mission Control" => ("#6a5cff", "#ffd25a"),
+			"Interstellar" => ("#ffdcc0", "#e2783a"),
+			"Airframe" => ("#1a1b1c", "#e8483f"),
+			"Dot Time" => ("#ffffff", "#ff4b2b"),
+			"Rolling Time" => ("#ffffff", "#ff4b2b"),
+			"Analog Dial" => ("#f1f0ec", "#ff4b2b"),
 			"Lottie Gauge" => ("#3af0ff", "#ff3d8b"),
 			_ => ("#ffffff", "#000000"), 
 		};
@@ -154,8 +191,10 @@ public sealed partial class Faces : IDisposable
 		switch (f.Face)
 		{
 		case "Carved":
-		case "Clock":
 			return false;
+		case "Clock":
+			// still, unless a moving background shows behind it
+			return Imaging.IsMoving(f.ActiveBackground(FanScreen.Now)) || f.HasPlaylist;
 		case "Image / GIF":
 			return f.HasPlaylist || Imaging.IsMoving(f.ActiveBackground(FanScreen.Now));
 		default:
@@ -264,10 +303,13 @@ public sealed partial class Faces : IDisposable
 			_shownBackground = background;
 		}
 		Image image = GetImage(background);
-		if (image != null && fan.Face != "Image / GIF" && fan.Face != "Lottie Gauge")
+		bool over = image != null && fan.Face != "Image / GIF" && fan.Face != "Lottie Gauge" && TakesBackground(fan.Face);
+		if (over)
 		{
-			Imaging.DrawCover(graphics, image, new RectangleF(0f, 0f, 400f, 400f), t, 0.55f);
+			Imaging.DrawCover(graphics, image!, new RectangleF(0f, 0f, 400f, 400f), t, 0.55f);
 		}
+		x = x with { Over = over };
+		_faceOver = over;
 		switch (fan.Face)
 		{
 		case "Glass Slab":
@@ -329,6 +371,24 @@ public sealed partial class Faces : IDisposable
 			break;
 		case "Lightbeam":
 			Lightbeam(x);
+			break;
+		case "Mission Control":
+			MissionFace(x);
+			break;
+		case "Interstellar":
+			InterstellarFace(x);
+			break;
+		case "Airframe":
+			AirframeFace(x);
+			break;
+		case "Dot Time":
+			DotTimeFace(x);
+			break;
+		case "Rolling Time":
+			RollingTimeFace(x);
+			break;
+		case "Analog Dial":
+			AnalogDialFace(x);
 			break;
 		case "Lottie Gauge":
 			LottieGauge(x, image);
@@ -409,7 +469,7 @@ public sealed partial class Faces : IDisposable
 	private void GlassSlab(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(Color.Black);
+		Backdrop(x, Color.Black);
 		RectangleF rectangleF = new RectangleF(42f, 42f, 316f, 316f);
 		using (GraphicsPath path = Imaging.Round(RectangleF.Inflate(rectangleF, 6f, 6f), 44f))
 		{
@@ -450,7 +510,7 @@ public sealed partial class Faces : IDisposable
 	private void Fading(FaceContext x)
 	{
 		Graphics g = x.G;
-		using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, 400, 400), Color.FromArgb(16, 16, 22), Color.Black, 90f))
+		if (!x.Over) using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, 400, 400), Color.FromArgb(16, 16, 22), Color.Black, 90f))
 		{
 			g.FillRectangle(brush, 0, 0, 400, 400);
 		}
@@ -526,7 +586,7 @@ public sealed partial class Faces : IDisposable
 	private void Liquid(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		float num = 360f - x.Fraction * 320f;
 		using GraphicsPath graphicsPath = new GraphicsPath();
 		List<PointF> list = new List<PointF>();
@@ -566,7 +626,7 @@ public sealed partial class Faces : IDisposable
 	private void Extruded(FaceContext x)
 	{
 		Graphics g = x.G;
-		using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, 400, 400), Color.FromArgb(30, 30, 40), Color.FromArgb(8, 8, 12), 90f))
+		if (!x.Over) using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, 400, 400), Color.FromArgb(30, 30, 40), Color.FromArgb(8, 8, 12), 90f))
 		{
 			g.FillRectangle(brush, 0, 0, 400, 400);
 		}
@@ -587,7 +647,7 @@ public sealed partial class Faces : IDisposable
 	private void Spotlight(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(Color.FromArgb(8, 8, 12));
+		Backdrop(x, Color.FromArgb(8, 8, 12));
 		using GraphicsPath graphicsPath = FitText(x.Value, "Segoe UI", FontStyle.Bold, new RectangleF(60f, 120f, 280f, 150f));
 		using (SolidBrush brush = new SolidBrush(x.C1))
 		{
@@ -623,7 +683,7 @@ public sealed partial class Faces : IDisposable
 	private void Prism(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		using GraphicsPath graphicsPath = FitText(x.Value, "Segoe UI Black", FontStyle.Bold, new RectangleF(60f, 115f, 280f, 150f));
 		RectangleF bounds = graphicsPath.GetBounds();
 		float num = (float)(x.T * 60.0 % 400.0);
@@ -670,7 +730,7 @@ public sealed partial class Faces : IDisposable
 	private void CutPaper(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		for (int i = 0; i < 4; i++)
 		{
 			float num = 180 - i * 34;
@@ -693,7 +753,7 @@ public sealed partial class Faces : IDisposable
 	private void Balloon(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		float num = (float)Math.Sin(x.T * 1.6) * 6f;
 		using GraphicsPath graphicsPath = FitText(x.Value, "Arial Rounded MT Bold", FontStyle.Bold, new RectangleF(60f, 115f + num, 280f, 150f));
 		DrawOffset(g, graphicsPath, Color.FromArgb(60, 0, 0, 0), 4f, 8f);
@@ -723,7 +783,7 @@ public sealed partial class Faces : IDisposable
 	private void Clock(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		DateTime now = DateTime.Now;
 		using (Pen pen = new Pen(Imaging.WithAlpha(x.C1, 70), 2f))
 		{
@@ -835,7 +895,7 @@ public sealed partial class Faces : IDisposable
 	private void Blade(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		Extrude.Outline outline = _extrude.Get(x.Value, "Bahnschrift", bold: true, 100f);
 		float num = ((outline.Bounds.Width < 1f) ? 120f : MathF.Floor(Math.Min(25000f / outline.Bounds.Width, 12800f / outline.Bounds.Height)));
 		Extrude.Outline outline2 = _extrude.Get(x.Value, "Bahnschrift", bold: true, num);
@@ -885,7 +945,7 @@ public sealed partial class Faces : IDisposable
 	private void Gap(FaceContext x)
 	{
 		Graphics g = x.G;
-		g.Clear(x.C2);
+		Backdrop(x, x.C2);
 		string text = x.Value.TrimEnd('%', '°', 'W');
 		if (!_rolls.TryGetValue(x.Fan.Serial, out (string, string, double) value))
 		{

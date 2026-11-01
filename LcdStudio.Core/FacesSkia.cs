@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -28,6 +28,9 @@ public sealed partial class Faces
 
 	private Bitmap? _skFace;
 
+	/// <summary>The surface FaceSkia is drawing on, for work done straight on its pixels.</summary>
+	private SKSurface? _faceSurface;
+
 	/// <summary>The face's state for this fan, stepped to now: the reading eased on a spring, and the time since last frame.</summary>
 	private (GlowState S, float F, double Dt) GlowStep(FaceContext x, string face)
 	{
@@ -56,15 +59,17 @@ public sealed partial class Faces
 		try
 		{
 			using SKSurface surface = SKSurface.Create(new SKImageInfo(Size, Size, SKColorType.Bgra8888, SKAlphaType.Premul), data.Scan0, data.Stride);
+			_faceSurface = surface;
 			draw(surface.Canvas);
 			surface.Canvas.Flush();
 		}
 		finally
 		{
+			_faceSurface = null;
 			_skFace.UnlockBits(data);
 		}
 		CompositingMode mode = g.CompositingMode;
-		g.CompositingMode = over ? CompositingMode.SourceOver : CompositingMode.SourceCopy;
+		g.CompositingMode = (over || _faceOver) ? CompositingMode.SourceOver : CompositingMode.SourceCopy;
 		g.DrawImageUnscaled(_skFace, 0, 0);
 		g.CompositingMode = mode;
 	}
@@ -125,7 +130,7 @@ public sealed partial class Faces
 		float hum = 0.92f + 0.08f * (float)Math.Sin(x.T * 1.3);
 		FaceSkia(x.G, c =>
 		{
-			c.Clear(new SKColor(6, 6, 14));
+			c.Clear(Back(x, new SKColor(6, 6, 14)));
 			SkiaKit.Glow(c, 200f, 200f, 240f, 240f, SkiaKit.Sk(x.C1, 0.1f + 0.08f * f), SKBlendMode.Plus);
 			var oval = new SKRect(48f, 48f, 352f, 352f);
 			using (var track = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 16f, Color = new SKColor(255, 255, 255, 22) })
@@ -186,7 +191,7 @@ public sealed partial class Faces
 		s.Ripple += dt * (0.25 + 0.6 * f);
 		FaceSkia(x.G, c =>
 		{
-			c.Clear(new SKColor(2, 6, 14));
+			c.Clear(Back(x, new SKColor(2, 6, 14)));
 			SkiaKit.Glow(c, 200f, 200f, 210f, 210f, SkiaKit.Sk(x.C2, 0.12f + 0.08f * f), SKBlendMode.Plus);
 			// the rings: each a set of segments, glowing softly behind and sharp in front
 			double[] spins = { s.Spin0, s.Spin1, s.Spin2 };

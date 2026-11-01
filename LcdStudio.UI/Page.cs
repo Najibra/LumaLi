@@ -64,6 +64,14 @@ public abstract class Page : Panel
 		{
 			_title.Text = Title;
 			_subtitle.Text = Subtitle;
+			// dark scrollbars to match the window
+			try
+			{
+				SetWindowTheme(base.Handle, "DarkMode_Explorer", null);
+			}
+			catch
+			{
+			}
 		};
 	}
 
@@ -99,6 +107,9 @@ public abstract class Page : Panel
 		Body.Controls.Add(card);
 		return card;
 	}
+
+	[System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+	private static extern int SetWindowTheme(nint hwnd, string? app, string? idList);
 
 	protected static void Break(Control c)
 	{

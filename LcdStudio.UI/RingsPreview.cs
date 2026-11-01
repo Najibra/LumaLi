@@ -21,7 +21,7 @@ internal sealed class RingsPreview : Control
 	protected override void OnPaint(PaintEventArgs e)
 	{
 		Graphics graphics = e.Graphics;
-		graphics.Clear(Color.FromArgb(10, 12, 26));
+		graphics.Clear(Color.FromArgb(6, 6, 7));
 		Theme.Smooth(graphics);
 		EffectSettings effectSettings;
 		lock (_engine.Settings)

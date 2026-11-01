@@ -286,7 +286,8 @@ public sealed class GameFps : IDisposable
 		"chrome", "msedge", "firefox", "opera", "brave", "vivaldi", "claude", "discord", "code", "explorer", "steam",
 		"steamwebhelper", "epicgameslauncher", "slack", "ms-teams", "teams", "spotify", "whatsapp", "telegram", "obs64",
 		"applicationframehost", "searchhost", "startmenuexperiencehost", "textinputhost", "shellexperiencehost", "msedgewebview2",
-		"lumali", "gpu tweak iii", "krakenlite", "nzxt cam", "monitor", "msiafterburner", "rtss", "nvidia app", "nvcontainer"
+		"lumali", "gpu tweak iii", "krakenlite", "nzxt cam", "monitor", "msiafterburner", "rtss", "nvidia app", "nvcontainer",
+		"windowsterminal", "openconsole", "conhost", "powershell", "pwsh", "cmd", "notepad", "devenv", "rider64"
 	};
 
 	private static uint ForegroundProcess()

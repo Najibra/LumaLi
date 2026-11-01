@@ -88,7 +88,7 @@ public sealed class Select : NavyControl
 		PaintParent(graphics);
 		Theme.Smooth(graphics);
 		RectangleF r = new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f);
-		Theme.FillRound(graphics, r, Theme.S(7f), Hot ? Theme.Hover : Theme.Field, Theme.FieldEdge);
+		Theme.FillRound(graphics, r, Theme.S(8f), Hot ? Theme.Hover : Theme.Field, Hot ? Theme.FieldEdge : Theme.CardEdge);
 		string selectedItem = SelectedItem;
 		Theme.DrawText(graphics, (selectedItem != null) ? Show(selectedItem) : "", Font, base.Enabled ? Theme.Text : Theme.Faint, new RectangleF(Theme.S(10f), 0f, base.Width - Theme.S(34f), base.Height));
 		float num = base.Width - Theme.S(15f);

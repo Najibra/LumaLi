@@ -15,7 +15,7 @@ public sealed class ColorField : Panel
 			Graphics graphics = e.Graphics;
 			PaintParent(graphics);
 			Theme.Smooth(graphics);
-			Theme.FillRound(graphics, new RectangleF(1f, 1f, base.Width - 3, base.Height - 3), Theme.S(6f), Value, Color.FromArgb(160, 255, 255, 255));
+			Theme.FillRound(graphics, new RectangleF(1f, 1f, base.Width - 3, base.Height - 3), Theme.S(6f), Value, Color.FromArgb(70, 255, 255, 255));
 		}
 	}
 

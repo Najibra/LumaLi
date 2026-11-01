@@ -53,9 +53,9 @@ public sealed class Toggle : NavyControl
 		PaintParent(graphics);
 		Theme.Smooth(graphics);
 		RectangleF r = new RectangleF(Theme.S(2f), (float)(base.Height - Theme.S(20f)) / 2f, Theme.S(38f), Theme.S(20f));
-		Theme.FillRound(graphics, r, r.Height / 2f, _on ? Theme.Accent : Theme.Field, _on ? null : new Color?(Theme.FieldEdge));
+		Theme.FillRound(graphics, r, r.Height / 2f, _on ? (base.Enabled ? Theme.Accent : Theme.Faint) : Theme.Field, _on ? null : new Color?(Theme.FieldEdge));
 		float num = r.Height - (float)Theme.S(6f);
-		using (SolidBrush brush = new SolidBrush(Color.White))
+		using (SolidBrush brush = new SolidBrush(_on ? Color.White : Theme.SubText))
 		{
 			graphics.FillEllipse(brush, _on ? (r.Right - num - (float)Theme.S(3f)) : (r.X + (float)Theme.S(3f)), r.Y + (float)Theme.S(3f), num, num);
 		}

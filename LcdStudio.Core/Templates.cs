@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -113,6 +113,10 @@ public static partial class Templates
 		return new List<ScreenLayout>
 		{
 			CommandCenter(),
+			Airframe(),
+			InterstellarMicro(),
+			Interstellar(),
+			MissionControl(),
 			Lightbeam(),
 			Standby(),
 			Constellation(),
@@ -149,7 +153,12 @@ public static partial class Templates
 			SilkTower(),
 			NeonColumn(),
 			AuroraRings(),
-			TallClock()
+			TallClock(),
+			RightNowTower(),
+			InstrumentColumn(),
+			DeckTower(),
+			StretchTower(),
+			GapTower()
 		};
 	}
 
@@ -338,6 +347,79 @@ public static partial class Templates
 		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "standby", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
 		return l;
 	}
+
+	/// <summary>
+	/// Mission Control: a deep-space command centre. A lit core holds the processor load inside a photon ring, with an
+	/// accretion disc crossing it. Rings of light flow outward, coloured by the last half minute of processor and
+	/// graphics load. A mission patch, the clock and the mission elapsed time sit on the left, and four telemetry
+	/// modules with pin charts sit on the right.
+	/// </summary>
+	private static ScreenLayout MissionControl()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Mission Control",
+			Description = "Flight-operations wall: NASA Earth with the live day/night line, a spacecraft on its ground track, subsystem telemetry",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#04060c",
+			Color2 = "#04060c"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "mission", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>
+	/// Interstellar: a lensed black hole in warm haze, after the film's mood. A blazing ring of light, faint lensed arcs
+	/// around it, and the disc seen edge-on: a thin white-hot line through the ring trailing into a long tail of glowing
+	/// dust and clumps down to the lower left, flowing faster with the processor load. The time in thin white type,
+	/// five readings in a quiet column on the right.
+	/// </summary>
+	private static ScreenLayout Interstellar()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Interstellar",
+			Description = "A lensed black hole in warm haze: a ring of light, a disc of glowing dust flowing with the load",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#120b08",
+			Color2 = "#120b08"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "interstellar", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>
+	/// Airframe: aircraft skin (brushed aluminium, rivets, seams, stencils) with a pack of technical labels: the
+	/// processor load as a huge panel number, graphics on a hinged plate, a vent fan turning with the graphics load,
+	/// and stickers for the time, processor temperature, memory and status.
+	/// </summary>
+	private static ScreenLayout Airframe()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Airframe",
+			Description = "Aircraft skin and technical labels: a huge panel number, stencils, a turning vent fan, barcode stickers",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#a4a7a9",
+			Color2 = "#a4a7a9"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "airframe", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Interstellar Micro: the same scene, its type set as a pack of technical labels with barcodes and decoding numbers.</summary>
+	private static ScreenLayout InterstellarMicro()
+	{
+		ScreenLayout l = Interstellar();
+		l.Name = "Interstellar Micro";
+		l.Description = "The Interstellar scene with its readings as technical labels: barcodes, REF/LOT tags, decoding numbers";
+		l.Widgets[0].Effect = "interstellar-micro";
+		return l;
+	}
+
 	/// <summary>
 	/// Constellation: every sensor as a glossy orb on a tilted ring round a golden core, spokes carrying data ticks,
 	/// value bars and comets; every so often the ring folds into a network of category hubs tied to the core by
@@ -357,6 +439,7 @@ public static partial class Templates
 		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "constellation", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
 		return l;
 	}
+
 	/// <summary>
 	/// Void: a triangular tunnel of LED dots flying towards the viewer, faster the busier the processor, its walls
 	/// standing for processor, graphics and memory and warming from ice blue to pink as they climb, with the time in
@@ -378,6 +461,7 @@ public static partial class Templates
 		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "voidpanel", Text = "right", X = 1320, Y = 0, W = 600, H = 480, Float = true });
 		return l;
 	}
+
 	/// <summary>
 	/// Instrument: six pale grey gauge tiles on black in black and burnt orange, the big numbers with faded decimals.
 	/// Processor load against its two-minute range, graphics load with a dial turning with the clock, memory on an
@@ -695,6 +779,7 @@ public static partial class Templates
 		l.Widgets.Add(Label("{date:dddd d MMMM}", 1440, 420, 450, "right"));
 		return l;
 	}
+
 	/// <summary>
 	/// A music-player look: warm colour drifting behind fluted glass, a 3D carousel of glass cards (one per
 	/// reading, each with a colourful cover, live value and history) that turns every six seconds, and a glass
@@ -1721,98 +1806,89 @@ public static partial class Templates
 		return screenLayout;
 	}
 
+	/// <summary>Classic, in glowing light: a white clock with a blue halo and a two-line history over a drifting aurora,
+	/// and four lit panels, each a big white reading with a coloured glow over a glowing bar chart of its last minutes.</summary>
 	private static ScreenLayout Classic()
 	{
-		ScreenLayout screenLayout = new ScreenLayout
+		ScreenLayout l = new ScreenLayout
 		{
 			Name = "Classic",
-			Description = "Clock and four tiles",
+			Description = "A glowing clock and four lit tiles with live bar charts",
 			BuiltIn = true,
-			Background = "gradient",
-			Color1 = "#0b1026",
-			Color2 = "#16204a"
+			Background = "aurora",
+			Color1 = "#050816",
+			Color2 = "#1b2a6b",
+			Accent = "#3fa9ff"
 		};
-		List<Widget> widgets = screenLayout.Widgets;
-		widgets.Add(T("{time:HH:mm}", 40, 60, 520, 230, 200f, "#ffffff", "left", bold: false, "Segoe UI Light"));
-		widgets.Add(T("{date:dddd d MMMM}", 50, 300, 520, 60, 34f, "#8fa3d9", "left", bold: false));
-		(string, string, string)[] array = new(string, string, string)[4]
+		l.Widgets.Add(G("{time:HH:mm}", 30, 34, 560, 220, 190f, "#3fa9ff"));
+		l.Widgets.Add(T("{date:dddd d MMMM}", 44, 256, 520, 50, 32f, "#a9bbef", "left", bold: false, Plain));
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Graph, Effect = "lines", Sensor = "cpu.load,gpu.load", Text = "#3fa9ff,#7cf0b0", X = 44, Y = 324, W = 520, H = 120, Size = 15f, Font = Plain, Min = 0f, Max = 100f });
+		(string Value, string Sensor, string Title, string Color, string Dark, float Max)[] tiles =
 		{
-			("cpu.load", "CPU", "#3fa9ff"),
-			("gpu.load", "GPU", "#7cf0b0"),
-			("ram.load", "MEMORY", "#b07cff"),
-			("gpu.temp", "GPU TEMP", "#ffb02e")
+			("{cpu.load:0}%", "cpu.load", "CPU", "#3fa9ff", "#0b2a55", 100f),
+			("{gpu.load:0}%", "gpu.load", "GPU", "#7cf0b0", "#0d3b2a", 100f),
+			("{ram.load:0}%", "ram.load", "Memory", "#b07cff", "#2a1450", 100f),
+			("{gpu.temp:0}°", "gpu.temp", "GPU temp", "#ffb02e", "#4a2a05", 95f)
 		};
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < tiles.Length; i++)
 		{
-			int num = 620 + i * 322;
-			widgets.Add(Panel(num, 60, 300, 360, "", "#26ffffff", "#0dffffff"));
-			widgets.Add(T(array[i].Item2, num + 24, 84, 260, 40, 24f, array[i].Item3));
-			widgets.Add(V(array[i].Item1, num + 24, 150, 260, 140, 110f));
-			widgets.Add(Bar(array[i].Item1, num + 24, 340, 252, 14, array[i].Item3, "#ffffff", (array[i].Item1 == "gpu.temp") ? 95 : 100));
+			int x = 620 + i * 322;
+			l.Widgets.Add(NeonBox(x, 30, 300, 420, tiles[i].Title, tiles[i].Color));
+			l.Widgets.Add(G(tiles[i].Value, x + 14, 96, 272, 140, 104f, tiles[i].Color, "center"));
+			l.Widgets.Add(new Widget { Kind = WidgetKind.Graph, Effect = "bars", Sensor = tiles[i].Sensor, X = x + 22, Y = 266, W = 256, H = 164, Text = tiles[i].Color + "," + tiles[i].Dark, Thickness = 6f, Min = 0f, Max = tiles[i].Max });
 		}
-		return screenLayout;
+		return l;
 	}
 
+	/// <summary>Synthwave in glowing light: the clock glowing pink over a striped sun, processor and graphics either side
+	/// as big white readings with pink and cyan halos, over a rolling grid whose lines glow and fade into the distance.</summary>
 	private static ScreenLayout NeonGrid()
 	{
-		ScreenLayout obj = new ScreenLayout
+		ScreenLayout l = new ScreenLayout
 		{
 			Name = "Neon Grid",
-			Description = "Synthwave sun and moving grid",
+			Description = "A glowing synthwave sun and grid rolling toward you",
 			BuiltIn = true,
 			Background = "grid",
 			Color1 = "#12002e",
 			Color2 = "#3a0a5e",
 			Accent = "#ff2bd6"
 		};
-		List<Widget> widgets = obj.Widgets;
-		Widget widget = T("{time:HH:mm:ss}", 560, 150, 800, 150, 120f, "#ffffff", "center", bold: true, "Consolas");
-		widget.Glow = true;
-		widget.Color2 = "#ff2bd6";
-		widgets.Add(widget);
-		widgets.Add(T("CPU", 60, 60, 300, 40, 26f, "#ff2bd6"));
-		widgets.Add(V("cpu.load", 60, 100, 400, 130, 110f));
-		widgets[widgets.Count - 1].Glow = true;
-		widgets[widgets.Count - 1].Color2 = "#ff2bd6";
-		widgets.Add(T("GPU", 1560, 60, 300, 40, 26f, "#29d3ff", "right"));
-		widgets.Add(V("gpu.load", 1460, 100, 400, 130, 110f, "#ffffff", "0", "right"));
-		widgets[widgets.Count - 1].Glow = true;
-		widgets[widgets.Count - 1].Color2 = "#29d3ff";
-		widgets.Add(T("{gpu.temp:0}°C  ·  {gpu.power:0} W", 1360, 240, 500, 40, 26f, "#29d3ff", "right"));
-		widgets.Add(T("{cpu.temp:0}°C  ·  RAM {ram.load:0}%", 60, 240, 500, 40, 26f, "#ff2bd6"));
-		return obj;
+		l.Widgets.Add(G("{time:HH:mm}", 560, 24, 800, 150, 112f, "#ff2bd6", "center"));
+		l.Widgets.Add(T("CPU", 60, 46, 300, 40, 26f, "#ff7be8", "left", bold: true, Plain));
+		l.Widgets.Add(G("{cpu.load:0}%", 50, 82, 460, 140, 110f, "#ff2bd6"));
+		l.Widgets.Add(T("{cpu.temp:0}°C  ·  RAM {ram.load:0}%", 60, 222, 500, 40, 26f, "#ff9cf0", "left", bold: false, Plain));
+		l.Widgets.Add(T("GPU", 1560, 46, 300, 40, 26f, "#7fe6ff", "right", bold: true, Plain));
+		l.Widgets.Add(G("{gpu.load:0}%", 1410, 82, 460, 140, 110f, "#29d3ff", "right"));
+		l.Widgets.Add(T("{gpu.temp:0}°C  ·  {gpu.power:0} W", 1360, 222, 500, 40, 26f, "#9feaff", "right", bold: false, Plain));
+		return l;
 	}
 
+	/// <summary>Heat Wave in glowing light: five big white readings with a red-hot glow over rolling warm waves whose
+	/// crests glow, the back ones soft and out of focus.</summary>
 	private static ScreenLayout HeatWave()
 	{
-		ScreenLayout screenLayout = new ScreenLayout
+		ScreenLayout l = new ScreenLayout
 		{
 			Name = "Heat Wave",
-			Description = "Big numbers on a warm moving gradient",
+			Description = "Big glowing numbers over rolling warm waves",
 			BuiltIn = true,
 			Background = "waves",
 			Color1 = "#ff7a18",
 			Color2 = "#af002d",
 			Accent = "#ffd200"
 		};
-		List<Widget> widgets = screenLayout.Widgets;
-		(string, string, string)[] array = new(string, string, string)[5]
+		(string Value, string Label, float Size)[] items =
 		{
-			("cpu.load", "CPU", "0"),
-			("gpu.load", "GPU", "0"),
-			("time", "TIME", "HH:mm"),
-			("gpu.temp", "GPU TEMP", "0"),
-			("ram.load", "MEMORY", "0")
+			("{cpu.load:0}%", "CPU", 132f), ("{gpu.load:0}%", "GPU", 132f), ("{time:HH:mm}", "TIME", 110f), ("{gpu.temp:0}°", "GPU TEMP", 132f), ("{ram.load:0}%", "MEMORY", 132f)
 		};
-		for (int i = 0; i < array.Length; i++)
+		for (int i = 0; i < items.Length; i++)
 		{
 			int x = 30 + i * 376;
-			widgets.Add(T(array[i].Item2, x, 90, 360, 40, 26f, "#fff3c4", "center"));
-			Widget widget = V(array[i].Item1, x, 140, 360, 200, (array[i].Item1 == "time") ? 110 : 140, "#ffffff", array[i].Item3, "center");
-			widget.Font = "Segoe UI Black";
-			widgets.Add(widget);
+			l.Widgets.Add(T(items[i].Label, x, 80, 360, 40, 26f, "#fff1c9", "center", bold: true, Plain));
+			l.Widgets.Add(G(items[i].Value, x, 126, 360, 190, items[i].Size, "#ff3a12", "center"));
 		}
-		return screenLayout;
+		return l;
 	}
 
 	private static ScreenLayout GlassTunnel()
@@ -1872,63 +1948,51 @@ public static partial class Templates
 		return screenLayout;
 	}
 
+	/// <summary>Just the time and date: a big white clock with a soft blue halo on black.</summary>
 	private static ScreenLayout MinimalClock()
 	{
-		return new ScreenLayout
+		ScreenLayout l = new ScreenLayout
 		{
 			Name = "Minimal Clock",
-			Description = "Just the time and date",
+			Description = "Just the time and date, softly glowing",
 			BuiltIn = true,
 			Background = "solid",
 			Color1 = "#000000",
-			Widgets = 
-			{
-				T("{time:HH:mm}", 0, 40, 1920, 320, 280f, "#ffffff", "center", bold: false, "Segoe UI Light"),
-				T("{date:dddd d MMMM}", 0, 360, 1920, 70, 40f, "#888888", "center", bold: false)
-			}
+			Color2 = "#000000"
 		};
+		l.Widgets.Add(G("{time:HH:mm}", 0, 62, 1920, 300, 260f, "#4f7dff", "center"));
+		l.Widgets.Add(T("{date:dddd d MMMM}", 0, 330, 1920, 70, 40f, "#8d97b5", "center", bold: false, Plain));
+		return l;
 	}
 
+	/// <summary>Focus GPU in glowing light: four big segmented rings glowing from green to lime (temperature heading to
+	/// amber and red), a bead riding each one's head, the readings white in the middle.</summary>
 	private static ScreenLayout FocusGpu()
 	{
-		ScreenLayout screenLayout = new ScreenLayout
+		ScreenLayout l = new ScreenLayout
 		{
 			Name = "Focus GPU",
-			Description = "Large graphics gauges for gaming",
+			Description = "Four big glowing rings for gaming",
 			BuiltIn = true,
 			Background = "gradient",
 			Color1 = "#020a06",
 			Color2 = "#0a2e1a",
 			Accent = "#76ff03"
 		};
-		List<Widget> widgets = screenLayout.Widgets;
-		(string, string, float)[] array = new(string, string, float)[4]
+		(string Sensor, string Label, float Max, string Palette)[] rings =
 		{
-			("gpu.load", "LOAD", 100f),
-			("gpu.temp", "TEMP °C", 95f),
-			("gpu.power", "POWER W", 575f),
-			("cpu.load", "CPU", 100f)
+			("gpu.load", "GPU LOAD", 100f, "#00c853,#76ff03,#e4ff3a"),
+			("gpu.temp", "GPU °C", 95f, "#00e676,#ffd600,#ff3d00"),
+			("gpu.power", "GPU WATTS", 575f, "#00bfa5,#00e676,#c6ff00"),
+			("cpu.load", "CPU LOAD", 100f, "#1de9b6,#00e5ff,#76ff03")
 		};
-		for (int i = 0; i < array.Length; i++)
+		for (int i = 0; i < rings.Length; i++)
 		{
-			widgets.Add(new Widget
-			{
-				Kind = WidgetKind.Gauge,
-				Sensor = array[i].Item1,
-				X = 40 + i * 470,
-				Y = 30,
-				W = 420,
-				H = 420,
-				Thickness = 22f,
-				Size = 96f,
-				Max = array[i].Item3,
-				Color = "#76ff03",
-				Color2 = "#00c853",
-				Text = array[i].Item2,
-				Glow = true,
-				Align = "center"
-			});
+			Widget ring = NeonRing(rings[i].Sensor, 50 + i * 470, 30, 420, rings[i].Palette, rings[i].Label, 92f, 20f);
+			ring.Max = rings[i].Max;
+			ring.Track = "#12301f";
+			l.Widgets.Add(ring);
 		}
-		return screenLayout;
+		return l;
 	}
 }

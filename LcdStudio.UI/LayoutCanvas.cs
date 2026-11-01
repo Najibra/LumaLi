@@ -133,7 +133,7 @@ public sealed class LayoutCanvas : Control
 		graphics.Clear(Theme.Window);
 		Theme.Smooth(graphics);
 		RectangleF area = Area;
-		Theme.FillRound(graphics, RectangleF.Inflate(area, Theme.S(5f), Theme.S(5f)), Theme.S(8f), Color.FromArgb(10, 12, 26), Focused ? Theme.Cyan : Color.FromArgb(90, 100, 160));
+		Theme.FillRound(graphics, RectangleF.Inflate(area, Theme.S(5f), Theme.S(5f)), Theme.S(8f), Color.FromArgb(6, 6, 7), Focused ? Theme.Cyan : Theme.CardEdge);
 		if (_frame != null)
 		{
 			graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;

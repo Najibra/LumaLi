@@ -38,7 +38,7 @@ public sealed class Slider : NavyControl
 
 	private int LabelWidth => Theme.S(48f);
 
-	private RectangleF Track => new RectangleF(Theme.S(8f), (float)base.Height / 2f - (float)Theme.S(2f), base.Width - Theme.S(16f) - LabelWidth, Theme.S(4f));
+	private RectangleF Track => new RectangleF(Theme.S(8f), (float)base.Height / 2f - (float)Theme.S(1.5f), base.Width - Theme.S(16f) - LabelWidth, Theme.S(3f));
 
 	public event EventHandler? ValueChanged;
 
@@ -65,13 +65,13 @@ public sealed class Slider : NavyControl
 		PaintParent(graphics);
 		Theme.Smooth(graphics);
 		RectangleF track = Track;
-		Theme.FillRound(graphics, track, track.Height / 2f, Color.FromArgb(28, 36, 90));
+		Theme.FillRound(graphics, track, track.Height / 2f, Theme.FieldEdge);
 		float num = ((Maximum > Minimum) ? ((float)(_value - Minimum) / (float)(Maximum - Minimum)) : 0f);
 		if (num > 0f)
 		{
 			RectangleF r = track;
 			r.Width = Math.Max(track.Height, track.Width * num);
-			Theme.FillRound(graphics, r, track.Height / 2f, base.Enabled ? Theme.Cyan : Theme.Faint);
+			Theme.FillRound(graphics, r, track.Height / 2f, base.Enabled ? Theme.Accent : Theme.Faint);
 		}
 		float num2 = Theme.S(14f);
 		using (SolidBrush brush = new SolidBrush(Color.White))

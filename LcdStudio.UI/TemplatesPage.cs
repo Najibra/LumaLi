@@ -39,13 +39,25 @@ public sealed class TemplatesPage : Page
 			item.Dispose();
 		}
 		_cards.Clear();
-		foreach (ScreenLayout item2 in E.VisibleLayouts())
+		List<ScreenLayout> wide = E.VisibleLayouts().Where((ScreenLayout l) => !l.Portrait).ToList();
+		List<ScreenLayout> tall = E.VisibleLayouts().Where((ScreenLayout l) => l.Portrait).ToList();
+		if (tall.Count > 0)
 		{
-			Card card = AddCard(null, 530);
+			Section("Wide layouts", wide.Count, first: true);
+		}
+		foreach (ScreenLayout item2 in wide.Concat(tall))
+		{
+			if (item2 == tall.FirstOrDefault())
+			{
+				Section("Vertical layouts — for a screen stood on its end", tall.Count, first: wide.Count == 0);
+			}
+			bool portrait = item2.Portrait;
+			Card card = AddCard(null, portrait ? 256 : 530);
 			string name = item2.Name;
 			ScreenPreview screenPreview = new ScreenPreview(E)
 			{
-				Size = new Size(Theme.S(498f), Theme.S(126f)),
+				Size = portrait ? new Size(Theme.S(150f), Theme.S(596f)) : new Size(Theme.S(498f), Theme.S(126f)),
+				Anchor = AnchorStyles.Top | AnchorStyles.Left,
 				Source = () => E.Layouts.FirstOrDefault((ScreenLayout l) => l.Name == name) ?? E.CurrentLayout,
 				IntervalMs = 1500
 			};
@@ -81,6 +93,15 @@ public sealed class TemplatesPage : Page
 				Remove(Main, E, this, name);
 				Refresh0();
 			}, primary: false, "\ue74d"));
+			// long descriptions wrap inside the card rather than widening the column (which pushed the preview right)
+			value2.MaximumSize = new Size(Theme.S(498f), 0);
+			if (portrait)
+			{
+				// the narrow card wraps its description and buttons
+				value.MaximumSize = new Size(Theme.S(228f), 0);
+				value2.MaximumSize = new Size(Theme.S(228f), 0);
+				stack.MaximumSize = new Size(Theme.S(232f), 0);
+			}
 			card.Controls.Add(new Stack
 			{
 				Controls = 
@@ -92,6 +113,10 @@ public sealed class TemplatesPage : Page
 				}
 			});
 			_cards.Add((card, screenPreview, name));
+		}
+		if (Body.Controls.Count > 0)
+		{
+			Body.SetFlowBreak(Body.Controls[Body.Controls.Count - 1], value: true);
 		}
 		Body.Controls.Add(new Btn("Import layout…", delegate
 		{
@@ -108,6 +133,20 @@ public sealed class TemplatesPage : Page
 		}
 		Body.ResumeLayout();
 		Highlight();
+	}
+
+	/// <summary>A heading across the page that starts a new group of cards.</summary>
+	private void Section(string title, int count, bool first)
+	{
+		// as wide as two cards, so it takes a row to itself (a flow break would give its row the next row's height)
+		Caption heading = new Caption($"{title}  ·  {count}", Theme.Text, Theme.BodyBold)
+		{
+			AutoSize = false,
+			Size = new Size(Theme.S(1074f), Theme.S(28f)),
+			TextAlign = ContentAlignment.BottomLeft,
+			Margin = new Padding(Theme.S(2f), Theme.S(first ? 2f : 22f), 0, Theme.S(6f))
+		};
+		Body.Controls.Add(heading);
 	}
 
 	private void Highlight()

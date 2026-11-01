@@ -48,6 +48,6 @@ public sealed class TextField : Panel
 		Graphics graphics = e.Graphics;
 		graphics.Clear((base.Parent is Card) ? Theme.Card : (base.Parent?.BackColor ?? Theme.Window));
 		Theme.Smooth(graphics);
-		Theme.FillRound(graphics, new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f), Theme.S(7f), Theme.Field, Box.Focused ? Theme.Cyan : Theme.FieldEdge);
+		Theme.FillRound(graphics, new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f), Theme.S(8f), Theme.Field, Box.Focused ? Theme.Cyan : Theme.CardEdge);
 	}
 }

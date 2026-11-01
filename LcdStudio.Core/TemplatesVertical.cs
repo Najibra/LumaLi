@@ -1,4 +1,4 @@
-namespace LcdStudio.Core;
+﻿namespace LcdStudio.Core;
 
 /// <summary>Templates for the 8.8" screen stood on its end (480 wide, 1920 tall).</summary>
 public static partial class Templates
@@ -152,6 +152,168 @@ public static partial class Templates
 		return l;
 	}
 
+	/// <summary>Right Now stood up: five poster numbers stacked, each over its word, stamping on every change.</summary>
+	private static ScreenLayout RightNowTower()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Right Now Tower",
+			Description = "Vertical: yellow poster numbers stacked on red, stamping on every change",
+			BuiltIn = true,
+			Portrait = true,
+			Background = "solid",
+			Color1 = "#ff3f1f",
+			Color2 = "#ff3f1f"
+		};
+		(string Sensor, string Word)[] rows = { ("cpu.load", "CPU"), ("gpu.load", "GPU"), ("gpu.temp", "HEAT"), ("gpu.power", "WATTS"), ("ram.load", "RAM") };
+		for (int i = 0; i < rows.Length; i++)
+		{
+			int y = 14 + i * 380;
+			bool temp = rows[i].Sensor == "gpu.temp";
+			l.Widgets.Add(new Widget
+			{
+				Kind = WidgetKind.Value, Sensor = rows[i].Sensor, Effect = "block", Float = true, Text = temp ? "°" : "", X = 10, Y = y, W = 460, H = 250,
+				Size = 220f, Font = "Impact", Bold = false, Align = "center", Color = "#ffc805", Color2 = "#050505", Format = "0",
+				WarnAt = temp ? 83 : 0, WarnColor = "#ffffff"
+			});
+			l.Widgets.Add(new Widget
+			{
+				Kind = WidgetKind.Text, Text = rows[i].Word, Effect = "block", Float = true, X = 10, Y = y + 250, W = 460, H = 110, Size = 96f,
+				Font = "Impact", Bold = false, Align = "center", Color = "#ffc805", Color2 = "#050505"
+			});
+		}
+		return l;
+	}
+
+	/// <summary>Instrument stood up: the time in pale type, the five gauge tiles (drawn at their wide-screen size and
+	/// scaled to the column) and the processor and graphics history in burnt orange.</summary>
+	private static ScreenLayout InstrumentColumn()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Instrument Column",
+			Description = "Vertical: pale instrument tiles in black and burnt orange; an alert tile that turns coral",
+			BuiltIn = true,
+			Portrait = true,
+			Background = "solid",
+			Color1 = "#000000",
+			Color2 = "#000000"
+		};
+		const string pale = "#e9e8e2", fade = "#8a8a86", orange = "#b0552a";
+		l.Widgets.Add(T("{time:HH:mm}", 0, 34, 480, 190, 140f, pale, "center", bold: false, "Segoe UI Semibold"));
+		l.Widgets.Add(T("{date:dddd d MMMM}", 0, 226, 480, 44, 28f, fade, "center", bold: false, "Segoe UI"));
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Divider, X = 160, Y = 288, W = 160, H = 10, Color = orange, Thickness = 3f });
+		const float zoom = 456f / 620f;
+		string[] tiles = { "cpu", "gpu", "mem", "power", "status" };
+		for (int i = 0; i < tiles.Length; i++)
+		{
+			l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "instrument", Text = tiles[i], X = 12, Y = 326 + i * 174, W = 456, H = 160, Float = true, Zoom = zoom });
+		}
+		l.Widgets.Add(T("PROCESSOR · LAST TWO MINUTES", 24, 1210, 440, 30, 17f, fade, "left", bold: false, "Segoe UI"));
+		l.Widgets.Add(Graph("cpu.load", 24, 1244, 432, 270, orange));
+		l.Widgets.Add(T("GRAPHICS · LAST TWO MINUTES", 24, 1548, 440, 30, 17f, fade, "left", bold: false, "Segoe UI"));
+		l.Widgets.Add(Graph("gpu.load", 24, 1582, 432, 270, pale));
+		return l;
+	}
+
+	/// <summary>Spectrum Deck stood up: the hero card on top, the processor, graphics, memory and thermal cards in
+	/// pairs and the network card across the foot, each drawn at its wide-screen size and scaled to fit.</summary>
+	private static ScreenLayout DeckTower()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Deck Tower",
+			Description = "Vertical: live glass cards; the busiest one takes the spotlight",
+			BuiltIn = true,
+			Portrait = true,
+			Background = "gradient",
+			Color1 = "#050608",
+			Color2 = "#0d1630",
+			Accent = "#e8873a"
+		};
+		Widget Card(string kind, int x, int y, int w, int h, float zoom) => new Widget { Kind = WidgetKind.Panel, Effect = "deck", Text = kind, X = x, Y = y, W = w, H = h, Float = true, Zoom = zoom };
+		l.Widgets.Add(Card("hero", 12, 12, 456, 554, 456f / 372f));
+		string[] cards = { "cpu", "gpu", "mem", "therm" };
+		for (int i = 0; i < cards.Length; i++)
+		{
+			l.Widgets.Add(Card(cards[i], 12 + (i % 2) * 234, 580 + (i / 2) * 358, 222, 344, 222f / 292f));
+		}
+		l.Widgets.Add(Card("net", 12, 1296, 456, 612, 1.4f));
+		return l;
+	}
+
+	/// <summary>Stretch stood up: black digits on paper that stretch down as the readings rise, five rows.</summary>
+	private static ScreenLayout StretchTower()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Stretch Tower",
+			Description = "Vertical: black digits that stretch down the page as the readings rise",
+			BuiltIn = true,
+			Portrait = true,
+			Background = "solid",
+			Color1 = "#ecebe5",
+			Color2 = "#ecebe5"
+		};
+		(string Sensor, string Part, string What, float Max)[] rows =
+		{
+			("cpu.load", "PROCESSOR", "LOAD %", 100f), ("gpu.load", "GRAPHICS", "LOAD %", 100f), ("gpu.temp", "GRAPHICS", "TEMP °C", 100f),
+			("gpu.power", "GRAPHICS", "POWER W", 575f), ("ram.load", "MEMORY", "IN USE %", 100f)
+		};
+		l.Widgets.Add(T("{time:HH:mm}", 24, 18, 432, 40, 30f, "#111111", "right", bold: true, "Bahnschrift Condensed"));
+		for (int i = 0; i < rows.Length; i++)
+		{
+			int y = 70 + i * 368;
+			l.Widgets.Add(new Widget
+			{
+				Kind = WidgetKind.Value, Sensor = rows[i].Sensor, Effect = "stretch", Float = true, Text = "", X = 24, Y = y, W = 432, H = 340, Size = 170f,
+				Thickness = 70f, Font = "Impact", Min = 0f, Max = rows[i].Max, Color = "#111111", Format = "0",
+				WarnAt = rows[i].Sensor == "gpu.temp" ? 83 : 0, WarnColor = "#c4241a"
+			});
+			l.Widgets.Add(T(rows[i].Part, 24, y + 282, 432, 20, 14f, "#111111", "right", bold: false, "Arial"));
+			l.Widgets.Add(T(rows[i].What, 24, y + 298, 432, 40, 30f, "#111111", "right", bold: true, "Bahnschrift Condensed"));
+		}
+		return l;
+	}
+
+	/// <summary>Gap stood up: towering black numbers on a white page, with the swinging yellow sticker.</summary>
+	private static ScreenLayout GapTower()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Gap Tower",
+			Description = "Vertical: towering black numbers on a white page, with a swinging yellow sticker",
+			BuiltIn = true,
+			Portrait = true,
+			Background = "solid",
+			Color1 = "#f6f5f1",
+			Color2 = "#f6f5f1"
+		};
+		(string Sensor, string Label)[] rows =
+		{
+			("cpu.load", "PROCESSOR LOAD %"), ("gpu.load", "GRAPHICS LOAD %"), ("gpu.temp", "GRAPHICS TEMPERATURE °C"),
+			("gpu.power", "GRAPHICS POWER W"), ("ram.load", "MEMORY IN USE %")
+		};
+		l.Widgets.Add(T("A SYSTEM OVERVIEW BY", 24, 20, 300, 34, 23f, "#0e0e0e", "left", bold: false, "Arial"));
+		l.Widgets.Add(T("LUMALI", 312, 20, 150, 34, 23f, "#0e0e0e", "left", bold: true, "Arial"));
+		for (int i = 0; i < rows.Length; i++)
+		{
+			int y = 90 + i * 360;
+			l.Widgets.Add(T(rows[i].Label, 24, y, 432, 26, 15f, "#0e0e0e", "left", bold: true, "Arial"));
+			l.Widgets.Add(new Widget
+			{
+				Kind = WidgetKind.Value, Sensor = rows[i].Sensor, Effect = "poster", Float = true, Text = "", X = 24, Y = y + 32, W = 432, H = 330,
+				Size = 100f, Font = "Impact", Bold = false, Align = "left", Color = "#0e0e0e", Format = "0",
+				WarnAt = rows[i].Sensor == "gpu.temp" ? 83 : 0, WarnColor = "#d92b1c"
+			});
+		}
+		l.Widgets.Add(new Widget
+		{
+			Kind = WidgetKind.Text, Effect = "tag", Float = true, Text = "LIVE EDITION WITH\\n{time:HH:mm} SYSTEM CLOCK", X = 120, Y = 1810, W = 330, H = 78,
+			Size = 19f, Font = "Arial", Bold = true, Color = "#0e0e0e", Color2 = "#f7c600"
+		});
+		return l;
+	}
 	/// <summary>A tall clock: hours over minutes in big glowing numerals, the date, and five readings in rows below.</summary>
 	private static ScreenLayout TallClock()
 	{

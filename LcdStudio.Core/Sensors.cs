@@ -32,7 +32,7 @@ public sealed class Sensors : IDisposable
 		public ulong Extended;
 	}
 
-	public static readonly SensorDef[] Catalog = new SensorDef[20]
+	public static readonly SensorDef[] Catalog = new SensorDef[]
 	{
 		new SensorDef("cpu.load", "CPU load", "%", 0f, 100f),
 		new SensorDef("cpu.temp", "CPU temperature", "°C", 20f, 95f),
@@ -53,7 +53,8 @@ public sealed class Sensors : IDisposable
 		new SensorDef("net.up", "Upload", "MB/s", 0f, 50f),
 		new SensorDef("fans.rpm", "Case fan speed", "RPM", 0f, 3000f),
 		new SensorDef("fans.duty", "Case fan duty", "%", 0f, 100f),
-		new SensorDef("game.fps", "Game frame rate", "FPS", 0f, 240f)
+		new SensorDef("game.fps", "Game frame rate", "FPS", 0f, 240f),
+		new SensorDef("top.cpu", "Busiest app's CPU share", "%", 0f, 100f)
 	};
 
 	private const int HistoryLength = 120;

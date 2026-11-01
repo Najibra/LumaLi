@@ -221,6 +221,8 @@ internal static class SelfTest
 			switch (text)
 			{
 			case "Clock":
+			case "Dot Time":
+			case "Rolling Time":
 			case "Image / GIF":
 			case "Lottie Gauge":
 			case "Carved":
@@ -295,6 +297,57 @@ internal static class SelfTest
 			Settings back = System.Text.Json.JsonSerializer.Deserialize<Settings>(System.Text.Json.JsonSerializer.Serialize(s))!;
 			Settings old = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"Layout\":\"Void\"}")!;
 			Check("Game profiles save and load", back.GameProfiles.Count == 1 && back.GameProfiles[0].Game == "Carpenter" && back.GameProfiles[0].Layout == "Neon" && old.GameProfiles.Count == 0);
+		}
+		{
+			// smart settings survive a save; an old file without them loads with auto mode off and the health watch on
+			var s = new Settings();
+			s.Smart.AutoMode = true;
+			s.Smart.GamingLayout = "Void";
+			s.Smart.WatchingEffect = "Aurora";
+			Settings back = System.Text.Json.JsonSerializer.Deserialize<Settings>(System.Text.Json.JsonSerializer.Serialize(s))!;
+			Settings old = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"Layout\":\"Void\"}")!;
+			Check("Smart settings save and load", back.Smart.AutoMode && back.Smart.LayoutFor(Activity.Gaming) == "Void" && back.Smart.EffectFor(Activity.Watching) == "Aurora"
+				&& back.Smart.LayoutFor(Activity.Working) == "" && !old.Smart.AutoMode && old.Smart.HealthWatch);
+		}
+		{
+			// a mostly blue picture with an orange patch gives blue first and orange second; a grey one a soft white
+			using Bitmap pic = new Bitmap(64, 36);
+			using (Graphics g = Graphics.FromImage(pic))
+			{
+				g.Clear(Color.FromArgb(20, 60, 220));
+				g.FillRectangle(Brushes.DarkOrange, 0, 0, 20, 36);
+			}
+			Color[] p = MonitorColors.Palette(pic);
+			using Bitmap grey = new Bitmap(64, 36);
+			using (Graphics g = Graphics.FromImage(grey))
+			{
+				g.Clear(Color.Gray);
+			}
+			Color[] q = MonitorColors.Palette(grey);
+			Check("Monitor colours: the main hues, vivid", p.Length == 2 && Math.Abs(p[0].GetHue() - 227) < 15 && Math.Abs(p[1].GetHue() - 33) < 15 && p[0].GetBrightness() > 0.5f
+				&& q[0].R > 190 && q[0].G > 190 && q[0].B > 190);
+		}
+		{
+			// two calm weeks, then three warm days: one dust note for the graphics card at rest; a fan group slower at the same duty
+			var hw = new HealthWatch();
+			var sens = new Sensors();
+			DateTime day0 = new DateTime(2026, 1, 1, 12, 0, 0);
+			for (int d = 0; d < 17; d++)
+			{
+				for (int m = 0; m < 30; m++)
+				{
+					sens.Set("gpu.load", 5f);
+					sens.Set("gpu.temp", d < 14 ? 34f : 42f);
+					sens.Set("group1.duty", 50f);
+					sens.Set("group1.rpm", d < 14 ? 1200f : 900f);
+					hw.Add(sens, day0.AddDays(d).AddMinutes(m));
+				}
+			}
+			List<string> notes = hw.Notes();
+			var fresh = new HealthWatch();
+			fresh.Add(sens, day0);
+			Check("Health watch: dust and a slow fan", notes.Count == 2 && notes.Any((string n) => n.Contains("graphics card at rest") && n.Contains("8 °C")) && notes.Any((string n) => n.Contains("Fan group 1"))
+				&& fresh.Notes().Count == 0);
 		}
 		{
 			// past its Warn at level the gauge turns the warning colour; a fan with no level stays in its own colours

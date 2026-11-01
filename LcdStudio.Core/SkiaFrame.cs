@@ -71,7 +71,9 @@ public sealed partial class ScreenRenderer
 		}
 		if (!direct)
 		{
-			g.DrawImageUnscaled(_skLayer!, area.X, area.Y);
+			// placed at its exact pixel size: DrawImageUnscaled scales by the bitmap's DPI, which in the app window is
+			// the display's (125 % and up), so previews came out enlarged and shifted
+			g.DrawImage(_skLayer!, new Rectangle(area.X, area.Y, area.Width, area.Height), new Rectangle(0, 0, area.Width, area.Height), GraphicsUnit.Pixel);
 		}
 	}
 }

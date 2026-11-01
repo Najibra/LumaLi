@@ -80,6 +80,10 @@ public sealed class Widget
 	/// <summary>An image widget's Lottie plays as a gauge of <see cref="Sensor"/> between Min and Max instead of looping.</summary>
 	public bool FollowsReading { get; set; }
 
+	/// <summary>Draws the widget at its size divided by this, then scales it down (or up) to its box. Lets a tile laid
+	/// out in fixed pixels for the wide screen fit a narrower box intact. Unset means 1.</summary>
+	public float? Zoom { get; set; }
+
 	public Widget Clone()
 	{
 		return (Widget)MemberwiseClone();

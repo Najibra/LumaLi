@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -15,6 +15,10 @@ public sealed class HomePage : Page
 	private readonly Card _warning;
 
 	private readonly Label _warningText;
+
+	private readonly Card _health;
+
+	private readonly Caption _healthText;
 
 	private readonly List<(Label Value, Sparkline Line, string Sensor, string Unit)> _stats = new List<(Label, Sparkline, string, string)>();
 
@@ -70,10 +74,10 @@ public sealed class HomePage : Page
 		});
 		(string, string, string, float, Color)[] array = new(string, string, string, float, Color)[4]
 		{
-			("Processor", "cpu.load", "%", 100f, Theme.Cyan),
-			("Graphics", "gpu.load", "%", 100f, Color.FromArgb(124, 240, 176)),
-			("GPU temperature", "gpu.temp", "°C", 100f, Theme.Warn),
-			("Memory", "ram.load", "%", 100f, Color.FromArgb(176, 124, 255))
+			("Processor", "cpu.load", "%", 100f, Theme.Accent),
+			("Graphics", "gpu.load", "%", 100f, Theme.Text),
+			("GPU temperature", "gpu.temp", "°C", 100f, Theme.SubText),
+			("Memory", "ram.load", "%", 100f, Theme.SubText)
 		};
 		for (int i = 0; i < array.Length; i++)
 		{
@@ -100,6 +104,13 @@ public sealed class HomePage : Page
 			_stats.Add((label, sparkline, tuple.Item2, tuple.Item3));
 		}
 		Body.SetFlowBreak(_warning, value: true);
+		// the health watch's warnings (dust, a slowing fan), only while there are some
+		_health = AddCard("Health watch", 1080);
+		_health.Border = Theme.Warn;
+		_healthText = new Caption("", Theme.Warn, Theme.Body) { AutoSize = false, Size = new Size(Theme.S(1040f), Theme.S(46f)) };
+		_health.Controls.Add(_healthText);
+		_health.Visible = false;
+		Body.SetFlowBreak(_health, value: true);
 		Card card2 = AddCard("8.8\" screen", 700);
 		_screen = new ScreenPreview(E)
 		{
@@ -113,7 +124,7 @@ public sealed class HomePage : Page
 		};
 		_layoutSelect = new Select(E.VisibleLayouts().Select((ScreenLayout l) => l.Name), E.Settings.Layout)
 		{
-			Width = Theme.S(300f)
+			Width = Theme.S(230f)
 		};
 		_layoutSelect.SelectedIndexChanged += delegate
 		{
@@ -123,7 +134,7 @@ public sealed class HomePage : Page
 		{
 			Controls = 
 			{
-				(Control?)new Caption("Switch layout"),
+				(Control?)new Caption("Layout"),
 				(Control?)_layoutSelect,
 				(Control?)new Btn("Remove", delegate
 				{
@@ -133,11 +144,11 @@ public sealed class HomePage : Page
 						_screen.Tick(force: true);
 					}
 				}, primary: false, ""),
-				(Control?)new Btn("Edit layout", delegate
+				(Control?)new Btn("Edit", delegate
 				{
 					Main.Show("Screen layout");
 				}, primary: false, "\ue7f4"),
-				(Control?)new Btn("All templates", delegate
+				(Control?)new Btn("Templates", delegate
 				{
 					Main.Show("Templates");
 				}, primary: false, "\uf0e2")
@@ -401,6 +412,14 @@ public sealed class HomePage : Page
 
 	public override void Tick()
 	{
+		List<string> notes = E.Settings.Smart.HealthWatch ? E.HealthNotes : new List<string>();
+		string healthText = string.Join("\n", notes);
+		if (_healthText.Text != healthText)
+		{
+			_healthText.Text = healthText;
+			_healthText.Height = Theme.S(24f * Math.Max(1, notes.Count) + 6f);
+			_health.Visible = notes.Count > 0;
+		}
 		foreach (var stat in _stats)
 		{
 			Label item = stat.Value;

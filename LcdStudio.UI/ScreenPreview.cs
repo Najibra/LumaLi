@@ -54,7 +54,9 @@ public sealed class ScreenPreview : Control
 		Graphics graphics = e.Graphics;
 		graphics.Clear((base.Parent is Card) ? Theme.Card : (base.Parent?.BackColor ?? Theme.Window));
 		Theme.Smooth(graphics);
-		float num = 4f;
+		// a tall control shows a vertical layout standing up (width : height = 1 : 4)
+		bool upright = base.Height > base.Width;
+		float num = upright ? 0.25f : 4f;
 		float num2 = base.Width - Theme.S(4f);
 		float num3 = num2 / num;
 		if (num3 > (float)(base.Height - Theme.S(4f)))
@@ -63,12 +65,12 @@ public sealed class ScreenPreview : Control
 			num2 = num3 * num;
 		}
 		RectangleF rectangleF = new RectangleF(((float)base.Width - num2) / 2f, ((float)base.Height - num3) / 2f, num2, num3);
-		Theme.FillRound(graphics, rectangleF, Theme.S(6f), Color.FromArgb(12, 14, 30), Selected ? Theme.Cyan : Color.FromArgb(90, 100, 160), Selected ? 2.5f : 1f);
+		Theme.FillRound(graphics, rectangleF, Theme.S(6f), Color.FromArgb(6, 6, 7), Selected ? Theme.Accent : Theme.CardEdge, Selected ? 2.5f : 1f);
 		RectangleF rect = RectangleF.Inflate(rectangleF, -Theme.S(4f), -Theme.S(4f));
 		if (_frame != null)
 		{
 			graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
-			if (_frame.Height > _frame.Width)
+			if (_frame.Height > _frame.Width && !upright)
 			{
 				// a vertical layout lies on its side here (its top to the left), as the wide card can't hold it upright
 				GraphicsState state = graphics.Save();
@@ -79,7 +81,7 @@ public sealed class ScreenPreview : Control
 				string tag = "VERTICAL";
 				SizeF size = graphics.MeasureString(tag, Theme.Small);
 				RectangleF pill = new RectangleF(rect.Right - size.Width - Theme.S(14f), rect.Y + Theme.S(6f), size.Width + Theme.S(10f), size.Height + Theme.S(2f));
-				Theme.FillRound(graphics, pill, pill.Height / 2f, Color.FromArgb(170, 10, 12, 26), Color.FromArgb(120, 140, 200, 255));
+				Theme.FillRound(graphics, pill, pill.Height / 2f, Color.FromArgb(190, 11, 11, 13), Theme.FieldEdge);
 				Theme.DrawText(graphics, tag, Theme.Small, Color.FromArgb(220, 230, 240, 255), new RectangleF(pill.X + Theme.S(5f), pill.Y + Theme.S(1f), size.Width + Theme.S(2f), size.Height));
 			}
 			else

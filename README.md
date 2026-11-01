@@ -4,7 +4,7 @@
 
 **A lightweight, deeply customizable open-source app for the Lian Li Universal Screen 8.8", TL Wireless LCD fans and wireless fan lighting.**
 
-30+ animated live-sensor layouts · a drag-and-drop layout editor · 22 fan-screen faces · Lottie animations · lighting that reacts to your temperatures · fan curves.
+45+ animated live-sensor layouts · a drag-and-drop layout editor · 28 fan-screen faces · Lottie animations · lighting that reacts to your temperatures · fan curves.
 One small `.exe`, no installer, no account, no telemetry.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -19,6 +19,28 @@ One small `.exe`, no installer, no account, no telemetry.
 > LumaLi is an independent community project. It is not made, endorsed or supported by Lian Li.
 > Close L-Connect before running it: two programs cannot drive the same USB devices at once.
 
+## New in 1.3
+
+![The new LumaLi app](docs/app/home.jpg)
+
+- **A new look:** a calm, near-black app with one red-orange accent, a new logo and icon, and a startup screen.
+- **New layouts:** Mission Control (a NASA Earth map with a live day/night line and a spacecraft on its ground track),
+  Interstellar and Interstellar Micro (a lensed black hole in warm haze, with a planet that eclipses it), and Airframe
+  (an aircraft skin with rivets, stencils and a vent fan turning at your real fan speed). Five more vertical layouts.
+- **New fan faces:** three watches — Dot Time, Rolling Time and Analog Dial — plus Airframe, Interstellar and a turning
+  Mission Control globe. Fan faces now show your background picture, GIF or video behind them.
+- **Smart mode:** a layout and fan effect for gaming, watching and working; strip and fans that follow your monitor's
+  colours; a health watch that tells you when the PC runs warmer or a fan slows down.
+
+| | |
+|---|---|
+| ![Mission Control](docs/layouts/mission-control.jpg) **Mission Control** | ![Airframe](docs/layouts/airframe.jpg) **Airframe** |
+| ![Interstellar](docs/layouts/interstellar.jpg) **Interstellar** | ![Interstellar Micro](docs/layouts/interstellar-micro.jpg) **Interstellar Micro** |
+
+![New fan faces](docs/fan-faces-new.jpg)
+
+Full list: [release notes](docs/RELEASE-NOTES-1.3.0.md).
+
 ## Why LumaLi
 
 **Light on your system.** Measured on a Ryzen 7 9800X3D (16 threads), with the heaviest setup running at once — the animated Lightbeam layout on the 8.8" screen at 20 fps, five animated fan screens at 12 fps and the light strip synced to the screen at 30 fps:
@@ -27,7 +49,7 @@ One small `.exe`, no installer, no account, no telemetry.
 |---|---|
 | CPU, whole app, heaviest setup | about 0.7 of one core (≈ 4 % of the whole CPU) |
 | Memory | about 190 MB |
-| Download | one 5.7 MB `.exe` (needs the free .NET 8 Desktop Runtime) |
+| Download | one ~19 MB `.exe` (needs the free .NET 8 Desktop Runtime) |
 | Background services, drivers, installers | none |
 | Network access, accounts, telemetry | none — it never goes online |
 
@@ -37,9 +59,9 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 
 - **A real layout editor** for the 1920×480 screen: drag, resize, snap, align, undo/redo, copy and paste. Widgets include text with live readings (`{cpu.load:0}%`, `{time:HH:mm}`, …), values, gauges, rings, bars, graphs, per-thread CPU bars, glass panels, images, GIFs and Lottie animations (`.json` / `.lottie`). A Lottie can loop, or follow a reading so it scrubs with your CPU or GPU load.
 - **Backgrounds:** solid, gradient, aurora, neon grid, heat waves, tunnel, carved stone, your own image or GIF, or a video.
-- **30+ built-in templates** to start from. Built-ins are copied on your first change, so the originals are never lost; remove the ones you don't use and restore them any time.
+- **45+ built-in templates** (wide and vertical) to start from. Built-ins are copied on your first change, so the originals are never lost; remove the ones you don't use and restore them any time.
 - **Export and import layouts** as `.json` to share them.
-- **22 fan-screen faces**, each with its own sensor, label, two colours, rotation and optional background image or GIF. The **Lottie Gauge** face has four built-in gauge styles (Arc, Needle, Liquid, LED ring) or takes your own Lottie, and can switch to a breathing warning colour above a level you set.
+- **28 fan-screen faces**, including three watch faces, each with its own sensor, label, two colours, rotation and optional background image or GIF. The **Lottie Gauge** face has four built-in gauge styles (Arc, Needle, Liquid, LED ring) or takes your own Lottie, and can switch to a breathing warning colour above a level you set.
 - **Lighting:** 21 animated fan effects (including Aurora and Comet trail) with their own speed, brightness and colours, and a light strip that can **match the screen layout** — the strip takes its colours and movement from whatever the screen is showing.
 - **Reactive lighting:** the fans can follow a reading, such as GPU temperature, and warm from your colours toward amber and red in four gentle steps as it rises.
 - **Standby screen:** a calm face with your logo (or the LumaLi mark), a large clock and the date, shown when the PC is idle or locked and left on the screen as it sleeps, hibernates or shuts down (if your motherboard keeps USB powered).
@@ -61,11 +83,13 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 | ![Deer](docs/layouts/deer.jpg) **Deer** — a dotted LED dashboard | ![Carousel](docs/layouts/carousel.jpg) **Carousel** — a turning carousel of glass cards |
 | ![Right Now](docs/layouts/right-now.jpg) **Right Now** — poster numbers that stamp on every change | ![Eclipse](docs/layouts/eclipse.jpg) **Eclipse** — sunrise over a planet's edge |
 
-…plus Lightbeam (top of this page), Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
+…plus Mission Control, Interstellar, Interstellar Micro and Airframe (above), Lightbeam (top of this page), nine vertical layouts, Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
 
 ### Fan screens (400 × 400)
 
-![The 21 fan-screen faces](docs/fan-faces.jpg)
+![New in 1.3: Dot Time, Rolling Time, Analog Dial, Airframe, Interstellar, Mission Control](docs/fan-faces-new.jpg)
+
+![More fan-screen faces](docs/fan-faces.jpg)
 
 ### The app
 
@@ -74,6 +98,7 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 | ![Home](docs/app/home.jpg) **Home** | ![Screen layout editor](docs/app/screen-layout.jpg) **Screen layout editor** |
 | ![Templates](docs/app/templates.jpg) **Templates** | ![Fan screens](docs/app/fan-screens.jpg) **Fan screens** |
 | ![Lighting](docs/app/lighting.jpg) **Lighting** | ![Cooling](docs/app/cooling.jpg) **Cooling** |
+| ![Settings](docs/app/settings.jpg) **Settings** | ![Startup screen](docs/startup.jpg) **Startup screen** |
 
 ## Supported hardware
 
@@ -106,7 +131,7 @@ Settings, layouts and uploads are kept in `%APPDATA%\LumaLi`. CPU temperature ne
 dotnet publish LumaLi.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
 ```
 
-This gives a single `dist\LumaLi.exe`. `LumaLi.exe --test <folder>` runs 151 offline checks (protocol framing, every face, template and effect) and writes renders of each; `--render-layout <Name> <folder>` saves stills of any layout. Neither touches your devices.
+This gives a single `dist\LumaLi.exe`. `LumaLi.exe --test <folder>` runs 197 offline checks (protocol framing, every face, template and effect) and writes renders of each; `--render-layout <Name> <folder>` saves stills of any layout. Neither touches your devices.
 
 ## How it works
 
@@ -122,6 +147,8 @@ LumaLi is free and always will be. If it brightens up your build, you can suppor
 - Compression for fan lighting: [sisong/tinyuz](https://github.com/sisong/tinyuz) (MIT)
 - Drawing and Lottie: [SkiaSharp and SkiaSharp.Skottie](https://github.com/mono/SkiaSharp) (MIT)
 - Sensors: [LibreHardwareMonitorLib](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0)
+- Interstellar type: [Montserrat](https://github.com/JulietaUla/Montserrat) (SIL OFL 1.1)
+- Earth maps: NASA Blue Marble and Black Marble (public domain)
 
 See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

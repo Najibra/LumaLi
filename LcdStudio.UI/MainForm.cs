@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -77,8 +77,8 @@ public sealed class MainForm : Form
 		{
 			AutoSize = false,
 			Visible = false,
-			BackColor = Theme.Accent,
-			ForeColor = Color.White,
+			BackColor = Theme.PrimaryFill,
+			ForeColor = Theme.PrimaryText,
 			Font = Theme.BodyBold,
 			TextAlign = ContentAlignment.MiddleCenter,
 			Size = new Size(Theme.S(420f), Theme.S(34f)),

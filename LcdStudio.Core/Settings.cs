@@ -59,6 +59,9 @@ public sealed class Settings
 
 	public StandbySettings Standby { get; set; } = new StandbySettings();
 
+	/// <summary>Auto mode, colours from the monitor and the health watch.</summary>
+	public SmartSettings Smart { get; set; } = new SmartSettings();
+
 
 	public bool StartWithWindows { get; set; }
 

@@ -78,7 +78,7 @@ public sealed class FanPreview : Control
 		Theme.Smooth(graphics);
 		float num = Math.Min(base.Width, base.Height) - Theme.S(4f);
 		RectangleF rect = new RectangleF(((float)base.Width - num) / 2f, ((float)base.Height - num) / 2f, num, num);
-		using (SolidBrush brush = new SolidBrush(Color.FromArgb(14, 16, 30)))
+		using (SolidBrush brush = new SolidBrush(Color.FromArgb(6, 6, 7)))
 		{
 			graphics.FillEllipse(brush, RectangleF.Inflate(rect, Theme.S(2f), Theme.S(2f)));
 		}
@@ -105,7 +105,7 @@ public sealed class FanPreview : Control
 			graphics.DrawImage(_local, rect);
 		}
 		graphics.Restore(gstate);
-		using Pen pen = new Pen(Color.FromArgb(120, 150, 170, 255), 1.5f);
+		using Pen pen = new Pen(Theme.FieldEdge, 1.5f);
 		graphics.DrawEllipse(pen, rect);
 	}
 

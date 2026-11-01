@@ -1,11 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>LumaLi</AssemblyName>
     <RootNamespace>LcdStudio</RootNamespace>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <Company>LumaLi</Company>
     <Product>LumaLi</Product>
     <LangVersion>latest</LangVersion>
@@ -20,5 +20,13 @@
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="SkiaSharp" Version="3.119.1" />
     <PackageReference Include="SkiaSharp.Skottie" Version="3.119.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- NASA Blue Marble (Oct 2004) and Black Marble (2016) Earth maps, public domain, scaled to 1920 x 960 -->
+    <EmbeddedResource Include="LcdStudio.Core\Assets\earth-day.jpg" LogicalName="earth-day.jpg" />
+    <EmbeddedResource Include="LcdStudio.Core\Assets\earth-night.jpg" LogicalName="earth-night.jpg" />
+    <!-- Montserrat (SIL Open Font License 1.1, see Assets\Montserrat-OFL.txt), used by the Interstellar layout -->
+    <EmbeddedResource Include="LcdStudio.Core\Assets\Montserrat-ExtraLight.ttf" LogicalName="Montserrat-ExtraLight.ttf" />
+    <EmbeddedResource Include="LcdStudio.Core\Assets\Montserrat-Light.ttf" LogicalName="Montserrat-Light.ttf" />
   </ItemGroup>
 </Project>

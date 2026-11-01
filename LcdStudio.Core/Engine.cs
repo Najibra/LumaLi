@@ -101,14 +101,163 @@ public sealed class Engine : IDisposable
 	/// <summary>The game profile in effect (its game is running), or null.</summary>
 	public GameProfile? ActiveGame { get; private set; }
 
-	/// <summary>What the screen shows: a running game's layout, or the chosen one. The editor still edits the chosen one.</summary>
+	/// <summary>
+	/// What the screen shows: a running game's layout, else (in auto mode) the layout set for what the PC is doing, else
+	/// the chosen one. The editor still edits the chosen one.
+	/// </summary>
 	public ScreenLayout ShownLayout
 	{
 		get
 		{
 			GameProfile? game = ActiveGame;
-			return (game == null ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == game.Layout)) ?? CurrentLayout;
+			ScreenLayout? shown = game == null ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == game.Layout);
+			if (shown == null && Settings.Smart.AutoMode)
+			{
+				string name = Settings.Smart.LayoutFor(CurrentActivity);
+				shown = name.Length == 0 ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == name);
+			}
+			return shown ?? CurrentLayout;
 		}
+	}
+
+	/// <summary>What the PC is doing (Activity.Gaming, Watching or Working), settled over a few seconds.</summary>
+	public string CurrentActivity { get; private set; } = Activity.Working;
+
+	private string _activitySeen = Activity.Working;
+
+	private DateTime _activitySeenAt = DateTime.UtcNow;
+
+	/// <summary>The monitor's two main colours, while the strip or fans follow them.</summary>
+	public Color[]? MonitorPalette { get; private set; }
+
+	/// <summary>The colours last sent to the fans, and when.</summary>
+	private Color[]? _fanPalette;
+
+	private DateTime _fanPaletteAt = DateTime.MinValue;
+
+	private DateTime _paletteAt = DateTime.MinValue;
+
+	private HealthWatch? _health;
+
+	private readonly TopApp _topApp = new TopApp();
+
+	private DateTime _healthAt = DateTime.MinValue;
+
+	private DateTime _topAt = DateTime.MinValue;
+
+	/// <summary>Warnings from the health watch (dust, a tiring fan); empty when all is well.</summary>
+	public List<string> HealthNotes { get; private set; } = new List<string>();
+
+	public string HealthSummary { get; private set; } = "";
+
+	private bool _smartOn;
+
+	/// <summary>The fan lighting effect in force: auto mode's for the activity, or the chosen one.</summary>
+	public string FanEffectNow(LightingSettings l)
+	{
+		if (Settings.Smart.AutoMode)
+		{
+			string e = Settings.Smart.EffectFor(CurrentActivity);
+			if (e.Length > 0 && Lighting.Effects.Contains(e))
+			{
+				return e;
+			}
+		}
+		return l.FanEffect;
+	}
+
+	/// <summary>The settings for that effect, with the monitor's colours when the fans follow them.</summary>
+	private EffectSettings FanSettingsNow(LightingSettings l, string effect)
+	{
+		EffectSettings s = l.For(effect);
+		Color[]? p = _fanPalette;
+		if (Settings.Smart.FansFollowMonitor && p != null && p.Length >= 2)
+		{
+			s = new EffectSettings { Speed = s.Speed, Brightness = s.Brightness, Color1 = MonitorColors.Hex(p[0]), Color2 = MonitorColors.Hex(p[1]) };
+		}
+		return s;
+	}
+
+	/// <summary>
+	/// Once a second from the sensor loop (full app only): the activity (it must hold 5 s before it counts, so alt-tab
+	/// doesn't flip the screen), the monitor's colours every 2 s while something follows them, the busiest app every
+	/// 3 s, and the health record once a minute.
+	/// </summary>
+	private void SmartTick()
+	{
+		SmartSettings smart = Settings.Smart;
+		DateTime now = DateTime.UtcNow;
+		string seen = Activity.Detect(Sensors);
+		if (seen != _activitySeen)
+		{
+			_activitySeen = seen;
+			_activitySeenAt = now;
+		}
+		if (seen != CurrentActivity && (now - _activitySeenAt).TotalSeconds >= 5.0)
+		{
+			string before = CurrentActivity;
+			CurrentActivity = seen;
+			Sensors.SetText("activity", seen);
+			if (smart.AutoMode)
+			{
+				Log.Write($"auto mode: {before} → {seen}");
+				if (smart.EffectFor(before) != smart.EffectFor(seen))
+				{
+					_lightingDirty = true;
+				}
+			}
+		}
+		if ((smart.StripFollowsMonitor || smart.FansFollowMonitor) && (now - _paletteAt).TotalSeconds >= 2.0)
+		{
+			_paletteAt = now;
+			Color[]? p = MonitorColors.Sample();
+			if (p != null)
+			{
+				MonitorPalette = p;
+				// the fans hold their loop in memory, so new colours go only when they've clearly changed, at most every 30 s
+				if (smart.FansFollowMonitor && (_fanPalette == null || MonitorColors.Distance(p, _fanPalette) >= 25.0) && (now - _fanPaletteAt).TotalSeconds >= 30.0)
+				{
+					_fanPalette = p;
+					_fanPaletteAt = now;
+					_lightingDirty = true;
+				}
+			}
+		}
+		if ((now - _topAt).TotalSeconds >= 3.0)
+		{
+			_topAt = now;
+			var top = _topApp.Sample();
+			if (top.HasValue)
+			{
+				Sensors.SetText("top.app", top.Value.Name);
+				Sensors.Set("top.cpu", top.Value.Percent);
+			}
+		}
+		if (smart.HealthWatch)
+		{
+			_health ??= HealthWatch.Load();
+			_health.Tick(Sensors, DateTime.Now);
+			if (HealthSummary.Length == 0 || (now - _healthAt).TotalSeconds >= 60.0)
+			{
+				_healthAt = now;
+				List<string> notes = _health.Notes();
+				if (notes.Count != HealthNotes.Count)
+				{
+					foreach (string n in notes)
+					{
+						Log.Write("health: " + n);
+					}
+				}
+				HealthNotes = notes;
+				HealthSummary = _health.Summary();
+			}
+		}
+	}
+
+	/// <summary>Writes the health record now (on exit).</summary>
+	private void SaveHealth()
+	{
+		_health?.Save();
 	}
 
 	private DateTime _gameCheck;
@@ -245,6 +394,7 @@ public sealed class Engine : IDisposable
 	{
 		StartSensorsOnly();
 		Sensors.StartGameFps();
+		_smartOn = true;
 		Acquire();
 	}
 
@@ -338,6 +488,10 @@ public sealed class Engine : IDisposable
 
 	public void Release(bool exiting = false)
 	{
+		if (exiting)
+		{
+			SaveHealth();
+		}
 		lock (_gate)
 		{
 			StopWorkers(exiting);
@@ -741,6 +895,17 @@ public sealed class Engine : IDisposable
 			catch (Exception ex)
 			{
 				Log.Write("sensor update: " + ex.Message);
+			}
+			if (_smartOn)
+			{
+				try
+				{
+					SmartTick();
+				}
+				catch (Exception ex)
+				{
+					Log.Write("smart: " + ex.Message);
+				}
 			}
 			Sensors.Bump();
 			_quit.Token.WaitHandle.WaitOne(1000);
@@ -1230,9 +1395,34 @@ public sealed class Engine : IDisposable
 					lock (Settings)
 					{
 						bool flag = lighting.StripFollowsFans && lighting.FansOn;
-						text = ((!lighting.StripOn) ? "Off" : (flag ? lighting.FanEffect : lighting.StripEffect));
+						string fanEffect = FanEffectNow(lighting);
+						text = ((!lighting.StripOn) ? "Off" : (flag ? fanEffect : lighting.StripEffect));
 						// following the fans, the strip warms with them, step for step
-						effectSettings = (flag ? Lighting.Warmed(lighting.For(lighting.FanEffect), lighting, lighting.React ? _reactStep : 0) : lighting.Strip);
+						effectSettings = (flag ? Lighting.Warmed(FanSettingsNow(lighting, fanEffect), lighting, lighting.React ? _reactStep : 0) : lighting.Strip);
+					}
+					Color[]? monitor = MonitorPalette;
+					if (lighting.StripOn && Settings.Smart.StripFollowsMonitor && monitor != null && monitor.Length >= 2)
+					{
+						// the monitor's two colours flowing slowly round the strip, easing over a second or two as they change
+						double level = Math.Clamp(lighting.Strip.Brightness, 0, 100) / 100.0;
+						var frame = new (byte R, byte G, byte B)[StripLeds];
+						double drift = Time * 0.05;
+						for (int i = 0; i < StripLeds; i++)
+						{
+							double k = 0.5 + 0.5 * Math.Sin((i / (double)StripLeds + drift) * Math.PI * 2.0);
+							Color a = monitor[0], b = monitor[1];
+							float r = (float)(a.R + (b.R - a.R) * k), gg = (float)(a.G + (b.G - a.G) * k), bb = (float)(a.B + (b.B - a.B) * k);
+							shown[i * 3] += (r - shown[i * 3]) * 0.08f;
+							shown[i * 3 + 1] += (gg - shown[i * 3 + 1]) * 0.08f;
+							shown[i * 3 + 2] += (bb - shown[i * 3 + 2]) * 0.08f;
+							frame[i] = ((byte)(shown[i * 3] * level), (byte)(shown[i * 3 + 1] * level), (byte)(shown[i * 3 + 2] * level));
+						}
+						ledStrip.Send(frame);
+						Strip.Running = true;
+						Strip.Fps = fpsCounter.Tick();
+						Strip.State = "following the monitor's colours";
+						NextFrame();
+						continue;
 					}
 					(byte R, byte G, byte B)[]? glow = _screenGlow;
 					if (lighting.StripOn && lighting.StripMatchesScreen && glow != null)
@@ -1396,8 +1586,9 @@ public sealed class Engine : IDisposable
 		lock (Settings)
 		{
 			LightingSettings lighting = Settings.Lighting;
-			text = (lighting.FansOn ? lighting.FanEffect : "Off");
-			EffectSettings effectSettings = lighting.For(lighting.FanEffect);
+			string effect = FanEffectNow(lighting);
+			text = (lighting.FansOn ? effect : "Off");
+			EffectSettings effectSettings = FanSettingsNow(lighting, effect);
 			s = Lighting.Warmed(effectSettings, lighting, lighting.React ? _reactStep : 0);
 		}
 		string warmth = Settings.Lighting.React && text != "Off" ? $" · warmth {_reactStep}/{Lighting.ReactSteps}" : "";

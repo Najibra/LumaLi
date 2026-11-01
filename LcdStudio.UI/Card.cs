@@ -53,7 +53,7 @@ public class Card : Panel
 		Graphics graphics = e.Graphics;
 		graphics.Clear(base.Parent?.BackColor ?? Theme.Window);
 		Theme.Smooth(graphics);
-		using (GraphicsPath path = Theme.Round(new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f), Theme.S(14f)))
+		using (GraphicsPath path = Theme.Round(new RectangleF(0.5f, 0.5f, (float)base.Width - 1.5f, (float)base.Height - 1.5f), Theme.S(12f)))
 		{
 			using (SolidBrush brush = new SolidBrush(Theme.Card))
 			{
@@ -64,11 +64,11 @@ public class Card : Panel
 		}
 		if (_title != null)
 		{
-			Theme.DrawText(graphics, _title.ToUpperInvariant(), Theme.Heading, Color.FromArgb(225, 232, 255), new RectangleF(Theme.S(16f), Theme.S(10f), base.Width - Theme.S(32f), Theme.S(24f)));
+			Theme.DrawText(graphics, _title.ToUpperInvariant(), Theme.Heading, Theme.SubText, new RectangleF(Theme.S(16f), Theme.S(11f), base.Width - Theme.S(32f), Theme.S(24f)));
 		}
 		if (RightText != null)
 		{
-			Theme.DrawText(graphics, RightText, Theme.Small, Theme.Cyan, new RectangleF(Theme.S(16f), Theme.S(10f), base.Width - Theme.S(32f), Theme.S(24f)), StringAlignment.Far);
+			Theme.DrawText(graphics, RightText, Theme.Small, Theme.Cyan, new RectangleF(Theme.S(16f), Theme.S(11f), base.Width - Theme.S(32f), Theme.S(24f)), StringAlignment.Far);
 		}
 	}
 }

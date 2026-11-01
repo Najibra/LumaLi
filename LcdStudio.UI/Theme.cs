@@ -53,54 +53,73 @@ public static class Theme
 		public const string Gauge = "\uec4a";
 	}
 
-	public static readonly Color Window = Color.FromArgb(26, 33, 82);
+	// a quiet, near-black palette: neutral greys, white text and one red-orange accent (the logo's dot)
 
-	public static readonly Color WindowBottom = Color.FromArgb(20, 26, 66);
+	public static readonly Color Window = Color.FromArgb(11, 11, 13);
 
-	public static readonly Color Sidebar = Color.FromArgb(22, 28, 72);
+	public static readonly Color WindowBottom = Color.FromArgb(11, 11, 13);
 
-	public static readonly Color Card = Color.FromArgb(42, 56, 128);
+	public static readonly Color Sidebar = Color.FromArgb(15, 15, 18);
 
-	public static readonly Color CardEdge = Color.FromArgb(64, 82, 170);
+	public static readonly Color Card = Color.FromArgb(20, 21, 24);
 
-	public static readonly Color Field = Color.FromArgb(31, 42, 100);
+	public static readonly Color CardEdge = Color.FromArgb(33, 34, 39);
 
-	public static readonly Color FieldEdge = Color.FromArgb(70, 90, 180);
+	public static readonly Color Field = Color.FromArgb(27, 28, 32);
 
-	public static readonly Color Hover = Color.FromArgb(52, 68, 150);
+	public static readonly Color FieldEdge = Color.FromArgb(44, 46, 52);
 
-	public static readonly Color Accent = Color.FromArgb(47, 128, 255);
+	public static readonly Color Hover = Color.FromArgb(36, 38, 43);
 
-	public static readonly Color Cyan = Color.FromArgb(63, 200, 255);
+	public static readonly Color Accent = Color.FromArgb(255, 75, 43);
 
-	public static readonly Color Text = Color.White;
+	/// <summary>The accent's lighter tint, for links, small highlights and the focus edge.</summary>
+	public static readonly Color Cyan = Color.FromArgb(255, 124, 96);
 
-	public static readonly Color SubText = Color.FromArgb(170, 182, 232);
+	public static readonly Color Text = Color.FromArgb(242, 242, 243);
 
-	public static readonly Color Faint = Color.FromArgb(118, 130, 190);
+	public static readonly Color SubText = Color.FromArgb(150, 152, 160);
 
-	public static readonly Color Good = Color.FromArgb(70, 220, 150);
+	public static readonly Color Faint = Color.FromArgb(92, 95, 103);
 
-	public static readonly Color Bad = Color.FromArgb(255, 110, 110);
+	public static readonly Color Good = Color.FromArgb(52, 211, 153);
 
-	public static readonly Color Warn = Color.FromArgb(255, 196, 70);
+	public static readonly Color Bad = Color.FromArgb(255, 99, 99);
 
-	public static Font Body = new Font("Segoe UI", 9.5f);
+	public static readonly Color Warn = Color.FromArgb(250, 190, 70);
 
-	public static Font BodyBold = new Font("Segoe UI Semibold", 9.5f);
+	/// <summary>The main button: white with black text, so the one thing to press stands out without colour.</summary>
+	public static readonly Color PrimaryFill = Color.FromArgb(242, 242, 243);
 
-	public static Font Small = new Font("Segoe UI", 8.25f);
+	public static readonly Color PrimaryText = Color.FromArgb(11, 11, 13);
 
-	public static Font SmallBold = new Font("Segoe UI Semibold", 8.25f);
+	public static readonly string TextFamily = Has("Segoe UI Variable Text") ? "Segoe UI Variable Text" : "Segoe UI";
 
-	public static Font Heading = new Font("Segoe UI Semibold", 9f);
+	public static readonly string TextBoldFamily = Has("Segoe UI Variable Text Semibold") ? "Segoe UI Variable Text Semibold" : "Segoe UI Semibold";
 
-	public static Font Title = new Font("Segoe UI Semibold", 17f);
+	public static readonly string DisplayFamily = Has("Segoe UI Variable Display") ? "Segoe UI Variable Display" : "Segoe UI";
 
-	public static Font Stat = new Font("Segoe UI Semibold", 18f);
+	public static Font Body = new Font(TextFamily, 9.5f);
+
+	public static Font BodyBold = new Font(TextBoldFamily, 9.5f);
+
+	public static Font Small = new Font(TextFamily, 8.25f);
+
+	public static Font SmallBold = new Font(TextBoldFamily, 8.25f);
+
+	public static Font Heading = new Font(TextBoldFamily, 8.25f);
+
+	public static Font Title = new Font(TextBoldFamily, 18f);
+
+	public static Font Stat = new Font(DisplayFamily, 20f);
 
 	public static Font Icons = new Font(IconFamily(), 11f);
 
+	private static bool Has(string family)
+	{
+		using InstalledFontCollection fonts = new InstalledFontCollection();
+		return fonts.Families.Any((FontFamily f) => f.Name == family);
+	}
 	public static float Scale { get; set; } = 1f;
 
 

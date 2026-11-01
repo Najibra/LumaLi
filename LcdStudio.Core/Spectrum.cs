@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -361,6 +361,8 @@ public sealed partial class ScreenRenderer
 		float h = st.Height;
 		float cy = r.Y + r.Height / 2f;
 		GraphicsState saved = g.Save();
+		// keep any scaling the caller set (a zoomed deck card) and place each letter on top of it
+		using Matrix outer = g.Transform;
 		g.InterpolationMode = InterpolationMode.Bilinear;
 		g.PixelOffsetMode = PixelOffsetMode.Half;
 		for (int i = 0; i < st.Keys.Length; i++)
@@ -388,7 +390,7 @@ public sealed partial class ScreenRenderer
 				angle += (st.From[i] - rest + (i % 2 == 0 ? 10f : -10f)) * e * (float)Math.Cos(since * 9.0);
 				scale += 0.1f * (float)Math.Exp(-6.0 * since);
 			}
-			g.ResetTransform();
+			g.Transform = outer;
 			g.TranslateTransform(r.X + st.X[i], cy + st.Lift[i] + dy);
 			g.RotateTransform(angle);
 			g.ScaleTransform(scale, scale);

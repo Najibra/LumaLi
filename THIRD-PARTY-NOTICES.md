@@ -59,3 +59,15 @@ Drawing and Lottie playback use SkiaSharp and SkiaSharp.Skottie (https://github.
 ## LibreHardwareMonitorLib
 
 Sensor readings come from LibreHardwareMonitorLib (https://github.com/LibreHardwareMonitor/LibreHardwareMonitor), referenced as a NuGet package and licensed under the Mozilla Public License 2.0 (https://www.mozilla.org/MPL/2.0/). Its source is available from that repository.
+
+## Montserrat
+
+The Interstellar layout uses Montserrat ExtraLight and Light, bundled in `LcdStudio.Core/Assets`.
+Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git).
+Licensed under the SIL Open Font License, Version 1.1; the full licence is in `LcdStudio.Core/Assets/Montserrat-OFL.txt`.
+
+## NASA Blue Marble and Black Marble
+
+The Earth maps in the Mission Control layout and fan face (`LcdStudio.Core/Assets/earth-day.jpg`, `earth-night.jpg`)
+are reduced from NASA's Blue Marble (day) and Black Marble (night) imagery by NASA Earth Observatory. NASA imagery is
+in the public domain. Its use does not imply endorsement by NASA.

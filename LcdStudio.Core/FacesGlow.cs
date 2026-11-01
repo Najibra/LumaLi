@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using SkiaSharp;
@@ -26,7 +26,7 @@ public sealed partial class Faces
 		s.Travel += dt * pace;
 		FaceSkia(x.G, c =>
 		{
-			c.Clear(new SKColor(2, 3, 8));
+			c.Clear(Back(x, new SKColor(2, 3, 8)));
 			SkiaKit.Glow(c, 200f, 200f, 170f, 170f, SkiaKit.Sk(x.C1, 0.05f + 0.12f * f), SKBlendMode.Plus);
 			using var p = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round, BlendMode = SKBlendMode.Plus };
 			float stretch = (float)(0.05 + 0.09 * pace);
@@ -128,7 +128,7 @@ public sealed partial class Faces
 		float sweep = (float)((s.Scan % 1.0) * 2.2 - 0.3) * cols;
 		FaceSkia(x.G, c =>
 		{
-			c.Clear(SkiaKit.Sk(x.C2));
+			c.Clear(Back(x, SkiaKit.Sk(x.C2)));
 			using var unlit = new SKPaint { IsAntialias = true, Color = SkiaKit.Sk(x.C1, 0.11f) };
 			using var lit = new SKPaint { IsAntialias = true };
 			Color hot = Imaging.Mix(x.C1, Color.White, 0.55);
@@ -172,7 +172,7 @@ public sealed partial class Faces
 		s.Heat += dt * (2.0 + 3.5 * f);
 		FaceSkia(x.G, c =>
 		{
-			c.Clear(new SKColor(10, 4, 4));
+			c.Clear(Back(x, new SKColor(10, 4, 4)));
 			using var ring = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 7f };
 			for (int r = 190; r >= 70; r -= 6)
 			{

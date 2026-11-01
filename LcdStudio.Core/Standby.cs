@@ -19,7 +19,7 @@ public sealed partial class ScreenRenderer
 	{
 		if (w.Effect != "standby" || w.Kind != WidgetKind.Panel)
 		{
-			return false;
+			return DrawMission(g, w, r, t);
 		}
 		Standby(g, w, t);
 		return true;

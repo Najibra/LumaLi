@@ -27,6 +27,11 @@ public static class Program
 	private static int Main(string[] args)
 	{
 		string[] args2 = args;
+		if (args2.Contains("--dpi-aware"))
+		{
+			// previews drawn as the app window draws them (per-monitor DPI aware), for checking DPI effects
+			Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+		}
 		if (args2.Contains("--test"))
 		{
 			return SelfTest.Run(args2);
@@ -377,6 +382,8 @@ public static class Program
 			float[] values = Opt("--values", "42").Split(',').Select((string v) => float.Parse(v, inv)).ToArray();
 			string[] stamps = Opt("--times", "1").Split(',');
 			Directory.CreateDirectory(a3[1]);
+			// watch faces read a fixed clock that moves with the frame times: --clock 10:09:50 (default)
+			Faces.PreviewClock = DateTime.Today + TimeSpan.Parse(Opt("--clock", "10:09:50"), inv);
 			using Faces faces2 = new Faces();
 			for (int i = 0; i < stamps.Length; i++)
 			{
@@ -407,6 +414,23 @@ public static class Program
 			copy.Widgets = source.Clone().Widgets;
 			Store.SaveLayouts(mine);
 			Log.Write($"refresh-copy: {a3[0]} now has the widgets of {a3[1]}");
+			return 0;
+		}
+		if (args2.Contains("--render-splash"))
+		{
+			// the startup screen's frames: --render-splash <dir> [--times 0.2,0.6,1.2]
+			string dir = args2.SkipWhile((string x) => x != "--render-splash").Skip(1).FirstOrDefault() ?? "splash";
+			Directory.CreateDirectory(dir);
+			string times = args2.SkipWhile((string x) => x != "--times").Skip(1).FirstOrDefault() ?? "1.6";
+			foreach (string stamp in times.Split(','))
+			{
+				using Bitmap frame = new Bitmap(Splash.W * 2, Splash.H * 2);
+				using (Graphics g = Graphics.FromImage(frame))
+				{
+					Splash.Draw(g, frame.Size, float.Parse(stamp, System.Globalization.CultureInfo.InvariantCulture), "Opening sensors and devices");
+				}
+				frame.Save(Path.Combine(dir, "splash-at-" + stamp + ".png"), ImageFormat.Png);
+			}
 			return 0;
 		}
 		if (args2.Contains("--make-icon"))
@@ -524,6 +548,26 @@ public static class Program
 			reportEngine.StartSensorsOnly();
 			Thread.Sleep(2500);
 			File.WriteAllText(file, LcdStudio.UI.SettingsPage.DeviceReport(reportEngine));
+			return 0;
+		}
+		if (args2.Contains("--smart-probe"))
+		{
+			// --smart-probe <file>: the monitor's colours, the activity and the busiest app, read twice 3 s apart
+			string file = args2.SkipWhile((string x) => x != "--smart-probe").Skip(1).FirstOrDefault() ?? "smart-probe.txt";
+			var lines = new List<string>();
+			var top = new TopApp();
+			var sensors = new Sensors();
+			top.Sample();
+			for (int i = 0; i < 2; i++)
+			{
+				Thread.Sleep(3000);
+				var sw = Stopwatch.StartNew();
+				Color[]? p = MonitorColors.Sample();
+				long ms = sw.ElapsedMilliseconds;
+				var busy = top.Sample();
+				lines.Add($"monitor {(p == null ? "unavailable" : string.Join(", ", p.Select(MonitorColors.Hex)))} ({ms} ms) · activity {LcdStudio.Core.Activity.Detect(sensors)} · busiest {busy?.Name ?? "?"} {busy?.Percent:0.0}%");
+			}
+			File.WriteAllLines(file, lines);
 			return 0;
 		}
 		if (args2.Contains("--fps-probe"))
@@ -691,7 +735,8 @@ public static class Program
 		}
 		bool createdNew;
 		using Mutex mutex = new Mutex(initiallyOwned: true, "Local\\LumaLi", out createdNew);
-		if (!createdNew && (!args2.Contains("--elevated") || !mutex.WaitOne(8000)))
+		// --snapshot only reads sensors and screenshots the pages, so it may run beside the real app
+		if (!createdNew && !args2.Contains("--snapshot") && (!args2.Contains("--elevated") || !mutex.WaitOne(8000)))
 		{
 			MessageBox.Show("LumaLi is already running — look for it in the system tray.", "LumaLi");
 			return 1;
@@ -712,7 +757,16 @@ public static class Program
 			Theme.Scale = graphics2.DpiX / 96f;
 		}
 		Log.Write("LumaLi " + Application.ProductVersion + " starting");
-		SettingsPage.MigrateStartup();
+		// the startup screen, unless LumaLi starts quietly in the tray
+		if (!args2.Contains("--tray") && !args2.Contains("--snapshot"))
+		{
+			Splash.Begin();
+			Splash.Status("Opening sensors and devices");
+		}
+		if (!args2.Contains("--snapshot"))
+		{
+			SettingsPage.MigrateStartup();
+		}
 		Engine engine = new Engine();
 		try
 		{
@@ -726,6 +780,10 @@ public static class Program
 				engine.Start();
 			}
 			MainForm form = new MainForm(engine);
+			form.Shown += delegate
+			{
+				Splash.End();
+			};
 			try
 			{
 				if (flag3)
