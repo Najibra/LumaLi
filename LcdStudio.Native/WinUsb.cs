@@ -55,8 +55,10 @@ public sealed class WinUsb : IDisposable
 		public byte Interval;
 	}
 
-	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[7]
+	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[8]
 	{
+		// experimental: the Lancool 207 Digital case screen (per sgtaziz/lian-li-linux, the 8.8" protocol at 720 × 1472)
+		("vid_1cbe&pid_a065", DeviceKind.CaseLcd),
 		("vid_1cbe&pid_a088", DeviceKind.Screen),
 		("vid_0416&pid_8050", DeviceKind.ScreenLeds),
 		("vid_1cbe&pid_0006", DeviceKind.FanLcd),
@@ -254,6 +256,7 @@ public sealed class WinUsb : IDisposable
 				DeviceKind.ScreenLeds => "Screen light strip",
 				DeviceKind.FanLcd or DeviceKind.FlexLcd or DeviceKind.TlLcd => FanName(d.Kind, ++fan),
 				DeviceKind.WirelessTx => "Wireless transmitter",
+				DeviceKind.CaseLcd => "Lancool 207 Digital screen",
 				_ => "Wireless receiver",
 			}
 		}).ToList();

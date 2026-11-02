@@ -285,6 +285,33 @@ internal static class SelfTest
 				&& LcdStudio.Native.WinUsb.IsFanScreen(LcdStudio.Native.DeviceKind.FlexLcd) && !LcdStudio.Native.WinUsb.IsFanScreen(LcdStudio.Native.DeviceKind.Screen));
 		}
 		{
+			// a Lancool 207 Digital's screen gets every layout whole on its 720 × 1472 panel, wide or vertical, either way up
+			using Bitmap wide = new Bitmap(1920, 480), tall = new Bitmap(480, 1920);
+			using (Graphics g = Graphics.FromImage(wide)) g.Clear(Color.Red);
+			using Bitmap a = LcdStudio.Core.Engine.CaseFrame(wide, portrait: false, flip: false);
+			using Bitmap b = LcdStudio.Core.Engine.CaseFrame(tall, portrait: true, flip: true);
+			// turned a quarter: the layout runs down the middle column, with a darkened copy at the sides
+			Color mid = a.GetPixel(360, 736), side = a.GetPixel(10, 736);
+			Check("Lancool 207 screen: layouts fitted whole to 720 × 1472, edges a dim copy", a.Width == 720 && a.Height == 1472 && b.Width == 720 && b.Height == 1472
+				&& mid.R > 240 && side.R > 20 && side.R < 140 && LcdStudio.Devices.LcdLink.PanelSize(LcdStudio.Native.DeviceKind.CaseLcd) == new Size(720, 1472));
+		}
+		{
+			// starting as administrator: a logon task with no time limit, not stopped on battery, that parses as XML
+			string xml = LcdStudio.UI.ElevatedStartup.TaskXml("C:\\Apps & Tools\\LumaLi.exe", "PC\\me");
+			bool parses;
+			try
+			{
+				System.Xml.Linq.XDocument.Parse(xml.Substring(xml.IndexOf("<Task", StringComparison.Ordinal)));
+				parses = true;
+			}
+			catch
+			{
+				parses = false;
+			}
+			Check("Start as administrator task: logon, highest rights, no time limit", parses && xml.Contains("<RunLevel>HighestAvailable</RunLevel>") && xml.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>")
+				&& xml.Contains("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>") && xml.Contains("Apps &amp; Tools") && xml.Contains("<Arguments>--tray</Arguments>"));
+		}
+		{
 			// a wired TL LCD packet as lian-li-linux builds it: report 2, command, total size, packet number, length
 			byte[] pk = LcdStudio.Devices.TlLcdLink.Build(0x46, 70000, 3, new byte[600]);
 			Check("Wired TL LCD packet header", pk.Length == 512 && pk[0] == 2 && pk[1] == 0x46 && pk[2] == 0 && pk[3] == 1 && pk[4] == 0x11 && pk[5] == 0x70

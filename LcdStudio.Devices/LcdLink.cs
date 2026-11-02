@@ -30,7 +30,15 @@ public sealed class LcdLink : IFanLink
 	public bool IsScreen => Info.Kind == DeviceKind.Screen;
 
 	/// <summary>Speaks the 8.8" screen's protocol (a 512-byte header before the picture, an answer to each): the screen and the Flex LCDs.</summary>
-	public bool IsSlv3 => Info.Kind == DeviceKind.Screen || Info.Kind == DeviceKind.FlexLcd;
+	public bool IsSlv3 => Info.Kind == DeviceKind.Screen || Info.Kind == DeviceKind.FlexLcd || Info.Kind == DeviceKind.CaseLcd;
+
+	/// <summary>The panel's own size in pixels, as it takes a frame (upright).</summary>
+	public static Size PanelSize(DeviceKind kind) => kind switch
+	{
+		DeviceKind.CaseLcd => new Size(720, 1472),
+		DeviceKind.Screen => new Size(480, 1920),
+		_ => new Size(400, 400)
+	};
 
 	public string? Firmware { get; private set; }
 
@@ -79,6 +87,27 @@ public sealed class LcdLink : IFanLink
 				graphics.Clear(Color.Black);
 			}
 			SendPayload(101, Imaging.Jpeg(bitmap, 80), 2000);
+		}
+		else if (Info.Kind == DeviceKind.CaseLcd)
+		{
+			// as lian-li-linux starts the Lancool 207 ("base" variant): stop-play, version, the clock synced and stopped,
+			// both layers cleared. It skips the frame-rate and H.264 block commands the 8.8" screen takes.
+			Command(123, 2000);
+			Thread.Sleep(150);
+			Firmware = ParseVersion(Command(10, 2000));
+			DateTime now3 = DateTime.Now;
+			Command(51, 2000, (byte)(now3.Year >> 8), (byte)now3.Year, (byte)now3.Month, (byte)now3.Day, (byte)now3.Hour, (byte)now3.Minute, (byte)now3.Second, 2);
+			Command(52, 2000, default(byte));
+			using (Bitmap clear = new Bitmap(720, 1472, PixelFormat.Format32bppArgb))
+			{
+				SendPayload(102, Imaging.Png(clear), 2000);
+			}
+			using Bitmap black = new Bitmap(720, 1472);
+			using (Graphics g = Graphics.FromImage(black))
+			{
+				g.Clear(Color.Black);
+			}
+			SendPayload(101, Imaging.Jpeg(black, 80), 2000);
 		}
 		else if (Info.Kind == DeviceKind.FlexLcd)
 		{
@@ -240,7 +269,7 @@ public sealed class LcdLink : IFanLink
 	{
 		try
 		{
-			if (IsScreen && _initialized)
+			if ((IsScreen || Info.Kind == DeviceKind.CaseLcd) && _initialized)
 			{
 				Command(123, 500);
 			}

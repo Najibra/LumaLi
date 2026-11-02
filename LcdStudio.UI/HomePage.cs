@@ -18,6 +18,14 @@ public sealed class HomePage : Page
 
 	private readonly Card _health;
 
+	private readonly Card _cpuHint;
+
+	private readonly Caption _cpuHintText;
+
+	private readonly Btn _cpuHintAdmin;
+
+	private readonly Btn _cpuHintDriver;
+
 	private readonly Caption _healthText;
 
 	private readonly List<(Label Value, Sparkline Line, string Sensor, string Unit)> _stats = new List<(Label, Sparkline, string, string)>();
@@ -111,6 +119,43 @@ public sealed class HomePage : Page
 		_health.Controls.Add(_healthText);
 		_health.Visible = false;
 		Body.SetFlowBreak(_health, value: true);
+		// without administrator rights (or, on Ryzen 9000, the PawnIO driver) Windows gives no CPU temperature, and the
+		// layouts show "--" for it; this says so and offers the fix, instead of leaving it a mystery
+		_cpuHint = AddCard("CPU temperature", 1080);
+		_cpuHintText = new Caption("", Theme.Text, Theme.Body) { AutoSize = false, Size = new Size(Theme.S(1040f), Theme.S(44f)) };
+		_cpuHintAdmin = new Btn("Restart as administrator", delegate
+		{
+			Main.Get<SettingsPage>("Settings").RestartAsAdmin();
+		}, primary: true);
+		_cpuHintDriver = new Btn("Get PawnIO", delegate
+		{
+			try
+			{
+				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://pawnio.eu") { UseShellExecute = true });
+			}
+			catch
+			{
+			}
+		});
+		Btn hide = new Btn("Hide", delegate
+		{
+			lock (E.Settings)
+			{
+				E.Settings.HideCpuTempHint = true;
+			}
+			E.SaveSoon();
+			_cpuHint.Visible = false;
+		});
+		_cpuHint.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)_cpuHintText,
+				(Control?)new Stack(horizontal: true) { Controls = { (Control?)_cpuHintAdmin, (Control?)_cpuHintDriver, (Control?)hide } }
+			}
+		});
+		_cpuHint.Visible = false;
+		Body.SetFlowBreak(_cpuHint, value: true);
 		Card card2 = AddCard("8.8\" screen", 700);
 		_screen = new ScreenPreview(E)
 		{
@@ -412,6 +457,18 @@ public sealed class HomePage : Page
 
 	public override void Tick()
 	{
+		// give the sensors 15 s to find the CPU temperature before saying it is missing
+		bool missing = !E.Sensors.CpuTempAvailable && !E.Settings.HideCpuTempHint && (DateTime.Now - E.Sensors.Started).TotalSeconds > 15;
+		if (_cpuHint.Visible != missing)
+		{
+			bool admin = SettingsPage.IsAdmin();
+			_cpuHintText.Text = admin
+				? "Windows isn't giving LumaLi the CPU temperature, so layouts show \"--\" for it. On Ryzen 9000 (and some other new processors) it also needs the free PawnIO driver: install it, then restart LumaLi."
+				: "The CPU temperature needs LumaLi to run as administrator; until then layouts show \"--\" for it (the game frame rate needs it too). Restart it as administrator; to start that way every time, then turn on Settings › App › \"…as administrator\".";
+			_cpuHintAdmin.Visible = !admin;
+			_cpuHintDriver.Visible = admin;
+			_cpuHint.Visible = missing;
+		}
 		List<string> notes = E.Settings.Smart.HealthWatch ? E.HealthNotes : new List<string>();
 		string healthText = string.Join("\n", notes);
 		if (_healthText.Text != healthText)

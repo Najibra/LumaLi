@@ -416,6 +416,22 @@ public static class Program
 			Log.Write($"refresh-copy: {a3[0]} now has the widgets of {a3[1]}");
 			return 0;
 		}
+		if (args2.Contains("--render-case"))
+		{
+			// what a Lancool 207 Digital's screen gets from a layout still: --render-case <layout.png> <out.png> [--portrait]
+			// (out.png is shown as the panel sits in the case, so a wide layout's frame is turned back to read)
+			string[] a = args2.SkipWhile((string x) => x != "--render-case").Skip(1).ToArray();
+			bool portrait = args2.Contains("--portrait");
+			using Bitmap still = new Bitmap(a[0]);
+			using Bitmap panel = Engine.CaseFrame(still, portrait, flip: false);
+			if (!portrait)
+			{
+				panel.RotateFlip(RotateFlipType.Rotate270FlipNone);
+			}
+			panel.Save(a[1], ImageFormat.Png);
+			Console.WriteLine($"{panel.Width}x{panel.Height}");
+			return 0;
+		}
 		if (args2.Contains("--render-splash"))
 		{
 			// the startup screen's frames: --render-splash <dir> [--times 0.2,0.6,1.2]
@@ -801,7 +817,19 @@ public static class Program
 							using Bitmap bitmap4 = new Bitmap(form.Width, form.Height);
 							form.DrawToBitmap(bitmap4, new Rectangle(0, 0, form.Width, form.Height));
 							bitmap4.Save(Path.Combine(dir, page.Replace(' ', '-').ToLowerInvariant() + ".png"), ImageFormat.Png);
-							FlowLayoutPanel flowLayoutPanel = form.Controls.OfType<Panel>().First().Controls.OfType<Page>().First((Page c) => c.Visible).Controls.OfType<FlowLayoutPanel>().First();
+							Page shown = form.Controls.OfType<Panel>().First().Controls.OfType<Page>().First((Page c) => c.Visible);
+							// long pages: also shoot each further screenful (settings-2.png, …)
+							int view = shown.ClientSize.Height, full = shown.DisplayRectangle.Height;
+							for (int part = 2, top = view - 60; top < full - 40 && part <= 6; part++, top += view - 60)
+							{
+								shown.AutoScrollPosition = new Point(0, top);
+								await Task.Delay(500);
+								using Bitmap more = new Bitmap(form.Width, form.Height);
+								form.DrawToBitmap(more, new Rectangle(0, 0, form.Width, form.Height));
+								more.Save(Path.Combine(dir, page.Replace(' ', '-').ToLowerInvariant() + "-" + part + ".png"), ImageFormat.Png);
+							}
+							shown.AutoScrollPosition = new Point(0, 0);
+							FlowLayoutPanel flowLayoutPanel = shown.Controls.OfType<FlowLayoutPanel>().First();
 							File.AppendAllLines(Path.Combine(dir, "layout.txt"), from Control c in flowLayoutPanel.Controls
 								select $"{page}: {c.GetType().Name} {c.Bounds} visible={c.Visible}");
 						}

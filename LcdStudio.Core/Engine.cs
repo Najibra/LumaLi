@@ -432,9 +432,12 @@ public sealed class Engine : IDisposable
 			Devices = OrderFans(WinUsb.Enumerate());
 			string[] array = CompetingProcesses();
 			Warning = ((array.Length != 0) ? (string.Join(", ", array) + " is running and may hold the devices. Close it so LumaLi can take over.") : null);
-			UsbDeviceInfo screen = Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen);
+			// the 8.8" screen, or else a Lancool 207 Digital's front screen, which then shows the same layouts
+			UsbDeviceInfo screen = Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen) ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.CaseLcd);
 			Screen.Present = screen != null;
 			Screen.Serial = screen?.Serial ?? "";
+			Screen.Kind = screen?.Kind ?? DeviceKind.Screen;
+			Screen.Name = Screen.Kind == DeviceKind.CaseLcd ? "Lancool 207 screen (experimental)" : "8.8\" screen";
 			Screen.State = ((screen == null) ? "not found" : "starting");
 			if (screen != null)
 			{
@@ -1020,6 +1023,14 @@ public sealed class Engine : IDisposable
 								_screenGlow = Lighting.FromScreen(bitmap, StripLeds);
 							}
 						}
+						// a Lancool 207's 720 × 1472 panel: the layout is fitted whole (see CaseFrame)
+						if (info.Kind == DeviceKind.CaseLcd)
+						{
+							using Bitmap fitted = CaseFrame(bitmap, screenLayout.Portrait, Settings.Flip);
+							array2 = Imaging.Jpeg(fitted, Settings.ScreenQuality);
+						}
+						else
+						{
 						// the panel itself is 480 × 1920: a wide frame turns a quarter, a vertical one is already upright
 						if (screenLayout.Portrait)
 						{
@@ -1033,6 +1044,7 @@ public sealed class Engine : IDisposable
 							bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
 						}
 						array2 = Imaging.Jpeg(bitmap, Settings.ScreenQuality);
+						}
 						timing.Render += Stopwatch.GetElapsedTime(r0, r1).TotalMilliseconds;
 						timing.Encode += Stopwatch.GetElapsedTime(r1).TotalMilliseconds;
 					}
@@ -1798,12 +1810,64 @@ public sealed class Engine : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// A layout frame made ready for a Lancool 207 Digital's 720 × 1472 panel, which sits landscape (1472 × 720) in the
+	/// case. The whole layout is shown, scaled to fit; the space it leaves holds a darkened, stretched copy of the same
+	/// frame, so the edges carry the layout's colours instead of black bars. Wide layouts turn a quarter like on the 8.8"
+	/// screen; vertical ones go upright. Flip turns either half a turn.
+	/// </summary>
+	public static Bitmap CaseFrame(Bitmap frame, bool portrait, bool flip)
+	{
+		Size panel = LcdLink.PanelSize(DeviceKind.CaseLcd);
+		int w = portrait ? panel.Width : panel.Height, h = portrait ? panel.Height : panel.Width;
+		Bitmap result = new Bitmap(w, h);
+		using (Graphics g = Graphics.FromImage(result))
+		{
+			g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+			g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+			float cover = Math.Max((float)w / frame.Width, (float)h / frame.Height);
+			float fit = Math.Min((float)w / frame.Width, (float)h / frame.Height);
+			// the copy is drawn tiny and stretched back up, so it reads as soft colour, not as ghost text
+			const int Shrink = 24;
+			using (Bitmap small = new Bitmap(Math.Max(1, w / Shrink), Math.Max(1, h / Shrink)))
+			{
+				using (Graphics gs = Graphics.FromImage(small))
+				{
+					gs.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+					float cw = frame.Width * cover / Shrink, ch = frame.Height * cover / Shrink;
+					gs.DrawImage(frame, (small.Width - cw) / 2f, (small.Height - ch) / 2f, cw, ch);
+				}
+				g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+				g.DrawImage(small, -w / (float)small.Width / 2f, -h / (float)small.Height / 2f, w + w / (float)small.Width, h + h / (float)small.Height);
+				g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+			}
+			using (SolidBrush shade = new SolidBrush(Color.FromArgb(150, 0, 0, 0)))
+			{
+				g.FillRectangle(shade, 0, 0, w, h);
+			}
+			float fw = frame.Width * fit, fh = frame.Height * fit;
+			g.DrawImage(frame, (w - fw) / 2f, (h - fh) / 2f, fw, fh);
+		}
+		if (portrait)
+		{
+			if (flip)
+			{
+				result.RotateFlip(RotateFlipType.Rotate180FlipNone);
+			}
+		}
+		else
+		{
+			result.RotateFlip(flip ? RotateFlipType.Rotate270FlipNone : RotateFlipType.Rotate90FlipNone);
+		}
+		return result;
+	}
+
 	public List<UsbDeviceInfo> StuckDevices()
 	{
 		List<UsbDeviceInfo> list = new List<UsbDeviceInfo>();
 		if (Screen.State.Contains("not responding"))
 		{
-			list.AddRange(Devices.Where((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen));
+			list.AddRange(Devices.Where((UsbDeviceInfo d) => (d.Kind == DeviceKind.Screen || d.Kind == DeviceKind.CaseLcd) && d.Serial == Screen.Serial));
 		}
 		if (Wireless.State.Contains("not responding"))
 		{

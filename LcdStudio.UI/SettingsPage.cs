@@ -178,14 +178,62 @@ public sealed class SettingsPage : Page
 		});
 		card3.Controls.Add(formGrid2);
 		Card card4 = AddCard("App", 530);
-		_startup = new Toggle("Start with Windows", IsStartupEnabled());
+		bool elevatedNow = ElevatedStartup.Enabled();
+		_startup = new Toggle("Start with Windows", IsStartupEnabled() || elevatedNow);
+		Toggle elevated = new Toggle("…as administrator, so CPU temperature and game FPS work from the start", elevatedNow);
+		bool settling = false;
 		_startup.CheckedChanged += delegate
 		{
-			SetStartup(_startup.Checked);
+			if (settling)
+			{
+				return;
+			}
+			if (!_startup.Checked && ElevatedStartup.Enabled())
+			{
+				string? err = IsAdmin() ? ElevatedStartup.Set(false, Environment.ProcessPath!) : "restart LumaLi as administrator first";
+				if (err != null)
+				{
+					Main.Toast("Couldn't turn off starting as administrator: " + err);
+					settling = true;
+					_startup.Checked = true;
+					settling = false;
+					return;
+				}
+				settling = true;
+				elevated.Checked = false;
+				settling = false;
+			}
+			SetStartup(_startup.Checked && !elevated.Checked);
 			Change(delegate(Settings x)
 			{
 				x.StartWithWindows = _startup.Checked;
 			});
+		};
+		elevated.CheckedChanged += delegate
+		{
+			if (settling)
+			{
+				return;
+			}
+			string? err = IsAdmin() ? ElevatedStartup.Set(elevated.Checked, Environment.ProcessPath!) : "use Restart as administrator first, then turn this on";
+			settling = true;
+			if (err != null)
+			{
+				elevated.Checked = !elevated.Checked;
+				Main.Toast("Couldn't change it: " + err);
+			}
+			else
+			{
+				// the task replaces the plain start-up entry (two would start two copies)
+				SetStartup(!elevated.Checked && _startup.Checked);
+				if (elevated.Checked)
+				{
+					_startup.Checked = true;
+					Change(delegate(Settings x) { x.StartWithWindows = true; });
+				}
+				Main.Toast(elevated.Checked ? "LumaLi will start as administrator when you sign in" : "LumaLi will start normally");
+			}
+			settling = false;
 		};
 		_tray = new Toggle("Closing the window keeps LumaLi running in the tray", settings.CloseToTray);
 		_tray.CheckedChanged += delegate
@@ -217,6 +265,7 @@ public sealed class SettingsPage : Page
 			Controls = 
 			{
 				(Control?)_startup,
+				(Control?)elevated,
 				(Control?)_tray,
 				(Control?)_minimized,
 				(Control?)_cpuTemp,
@@ -394,7 +443,7 @@ public sealed class SettingsPage : Page
 			Controls =
 			{
 				(Control?)auto,
-				(Control?)Note("Gaming is a game drawing frames in front (needs administrator, like the frame rate); watching is a player or browser full screen. A change waits 5 seconds, and a game profile still comes first. For each: a layout, then a fan lighting effect."),
+				(Control?)Note("Gaming is a game drawing frames in front (needs administrator, like the frame rate); watching is a player or browser full screen. A change waits 5 seconds, and a game profile still comes first. For each: a layout, then a fan lighting effect.", 40),
 				(Control?)grid,
 				(Control?)_smartState,
 				(Control?)strip,
@@ -622,19 +671,20 @@ public sealed class SettingsPage : Page
 	private static List<string> KnownUsb()
 	{
 		var lines = new List<string>();
-		// Lian Li's own vendor IDs, and from the shared 04FC vendor only the wired TL LCD
-		string[] vendors = { "vid_1cbe", "vid_0416", "vid_04fc&pid_7393" };
+		// Lian Li's own vendor IDs, from the shared 04FC vendor only the wired TL LCD, and 1A86 (the CH340 chip in Lian Li's
+		// desktop-mode screens, newer dongles and Turzx screens); plus any device Windows names Turzx
+		string[] vendors = { "vid_1cbe", "vid_0416", "vid_04fc&pid_7393", "vid_1a86" };
 		try
 		{
 			using RegistryKey? usb = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\USB");
 			foreach (string id in usb?.GetSubKeyNames() ?? Array.Empty<string>())
 			{
 				string low = id.ToLowerInvariant();
-				if (!vendors.Any(low.StartsWith))
+				using RegistryKey? dev = usb!.OpenSubKey(id);
+				if (!vendors.Any(low.StartsWith) && !NamedTurzx(dev))
 				{
 					continue;
 				}
-				using RegistryKey? dev = usb!.OpenSubKey(id);
 				int count = dev?.SubKeyCount ?? 0;
 				string desc = "";
 				foreach (string inst in dev?.GetSubKeyNames() ?? Array.Empty<string>())
@@ -660,6 +710,20 @@ public sealed class SettingsPage : Page
 			lines.Add("(none)");
 		}
 		return lines;
+	}
+
+	private static bool NamedTurzx(RegistryKey? dev)
+	{
+		foreach (string inst in dev?.GetSubKeyNames() ?? Array.Empty<string>())
+		{
+			using RegistryKey? k = dev!.OpenSubKey(inst);
+			string text = (k?.GetValue("FriendlyName") as string) + " " + (k?.GetValue("DeviceDesc") as string) + " " + (k?.GetValue("Mfg") as string);
+			if (text.Contains("turzx", StringComparison.OrdinalIgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private async void RestartStuck()
@@ -832,13 +896,13 @@ public sealed class SettingsPage : Page
 		}
 	}
 
-	private static bool IsAdmin()
+	internal static bool IsAdmin()
 	{
 		using WindowsIdentity ntIdentity = WindowsIdentity.GetCurrent();
 		return new WindowsPrincipal(ntIdentity).IsInRole(WindowsBuiltInRole.Administrator);
 	}
 
-	private void RestartAsAdmin()
+	internal void RestartAsAdmin()
 	{
 		try
 		{

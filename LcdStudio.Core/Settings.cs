@@ -70,6 +70,9 @@ public sealed class Settings
 
 	public bool StartMinimized { get; set; }
 
+	/// <summary>The Home page's note on how to get the CPU temperature was hidden.</summary>
+	public bool HideCpuTempHint { get; set; }
+
 	public FanScreen FanFor(string serial)
 	{
 		string serial2 = serial;
