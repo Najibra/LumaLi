@@ -247,6 +247,12 @@ public sealed partial class ScreenRenderer : IDisposable
 				case "interstellar":
 				case "interstellar-micro":
 				case "airframe":
+				case "station":
+				case "sportdial":
+				case "jellyfish":
+				case "clearance":
+				case "retrorack":
+				case "machined":
 					flag3 = true;
 					break;
 				default:

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -55,13 +55,15 @@ public sealed class WinUsb : IDisposable
 		public byte Interval;
 	}
 
-	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[8]
+	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[9]
 	{
 		// experimental: the Lancool 207 Digital case screen (per sgtaziz/lian-li-linux, the 8.8" protocol at 720 × 1472)
 		("vid_1cbe&pid_a065", DeviceKind.CaseLcd),
 		("vid_1cbe&pid_a088", DeviceKind.Screen),
 		("vid_0416&pid_8050", DeviceKind.ScreenLeds),
 		("vid_1cbe&pid_0006", DeviceKind.FanLcd),
+		// experimental: the SL V3 wireless LCD fans; lian-li-linux drives them with the same code as the TL ones (0006)
+		("vid_1cbe&pid_0005", DeviceKind.FanLcd),
 		("vid_0416&pid_8040", DeviceKind.WirelessTx),
 		("vid_0416&pid_8041", DeviceKind.WirelessRx),
 		// experimental: not tried on real hardware yet (per sgtaziz/lian-li-linux, the 8.8" screen's protocol at 400 × 400)

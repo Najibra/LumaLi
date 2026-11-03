@@ -41,7 +41,7 @@ public sealed partial class ScreenRenderer
 	{
 		if (w.Effect != "airframe" || w.Kind != WidgetKind.Panel)
 		{
-			return false;
+			return DrawWatches(g, w, r, t);
 		}
 		Airframe(g, t);
 		return true;

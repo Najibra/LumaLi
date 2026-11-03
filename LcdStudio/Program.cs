@@ -103,6 +103,12 @@ public static class Program
 			engine3.StartSensorsOnly();
 			Thread.Sleep(2500);
 			ScreenLayout layout = Templates.All().First((ScreenLayout l) => l.Name == a2[0]);
+			// --clock hh:mm:ss: watch layouts read this fixed clock, moved on by the frame times
+			string? clock = args2.SkipWhile((string x) => x != "--clock").Skip(1).FirstOrDefault();
+			if (clock != null)
+			{
+				Faces.PreviewClock = DateTime.Today + TimeSpan.Parse(clock, System.Globalization.CultureInfo.InvariantCulture);
+			}
 			// --image <file>: the layout over a picture, GIF or Lottie animation instead of its own background
 			string? backdrop = args2.SkipWhile((string x) => x != "--image").Skip(1).FirstOrDefault();
 			if (backdrop != null)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -33,10 +33,12 @@ public sealed class FansPage : Page
 			}
 			E.SaveSoon();
 		};
-		_none = new Caption("No fan screens found. Close L-Connect, then use Settings › Rescan devices. You can still prepare faces below.", Theme.Warn)
+		// the wireless dongle carries only lighting and fan speed: an LCD fan's screen is its own USB device, reached only
+		// through the fan's USB cable (lian-li-linux's README says the same)
+		_none = new Caption("No fan screens found. A wireless LCD fan's screen needs the fan's own USB cable plugged into a motherboard USB 2.0 header or hub; the wireless dongle carries only lighting and speed. Close L-Connect, then use Settings › Rescan devices. You can still prepare faces below.", Theme.Warn)
 		{
 			AutoSize = false,
-			Size = new Size(Theme.S(1000f), Theme.S(26f))
+			Size = new Size(Theme.S(1000f), Theme.S(48f))
 		};
 		Stack stack = new Stack(horizontal: true)
 		{

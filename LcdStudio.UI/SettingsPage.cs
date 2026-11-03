@@ -639,7 +639,8 @@ public sealed class SettingsPage : Page
 		sb.AppendLine("LumaLi " + Application.ProductVersion.Split('+')[0] + (IsAdmin() ? " (administrator)" : " (not administrator)"));
 		sb.AppendLine("Windows " + Environment.OSVersion.Version);
 		sb.AppendLine("Processor: " + (e.Sensors.Text("cpu.name") ?? "?") + " · Graphics: " + (e.Sensors.Text("gpu.name") ?? "?"));
-		sb.AppendLine("CPU temperature: " + (e.Sensors.CpuTempAvailable ? "available" : "unavailable") + " · Game frame rate: " + (e.Sensors.GameFpsSource ?? "off"));
+		sb.AppendLine("CPU temperature: " + (e.Sensors.CpuTempAvailable ? "available" : "unavailable") + " · PawnIO driver: " + (LcdStudio.Core.Sensors.PawnIoInstalled ? "installed" : "not installed") + " · Game frame rate: " + (e.Sensors.GameFpsSource ?? "off"));
+		sb.AppendLine("CPU temperature sensors: " + e.Sensors.CpuTempSensors);
 		string[] rivals = Engine.CompetingProcesses();
 		if (rivals.Length > 0)
 		{
@@ -833,7 +834,7 @@ public sealed class SettingsPage : Page
 		{
 			UpdateDevices();
 		}
-		string text = (E.Sensors.CpuTempAvailable ? $"CPU temperature: {E.Sensors.Get("cpu.temp"):0} °C" : (IsAdmin() ? "CPU temperature unavailable. On Ryzen 9000 it needs the PawnIO driver: winget install namazso.PawnIO" : "CPU temperature and game frame rate need administrator rights (CPU temperature also the PawnIO driver on Ryzen 9000). GPU readings work without."));
+		string text = (E.Sensors.CpuTempAvailable ? $"CPU temperature: {E.Sensors.Get("cpu.temp"):0} °C" : (!LcdStudio.Core.Sensors.PawnIoInstalled ? "CPU temperature needs the PawnIO driver on every processor (Intel and AMD)" + (IsAdmin() ? "" : " and administrator rights") + ": winget install namazso.PawnIO, then restart the PC." : IsAdmin() ? "CPU temperature unavailable although PawnIO is installed: restart the PC once, or send the device report." : "CPU temperature and game frame rate need administrator rights. GPU readings work without."));
 		if (E.Sensors.GameFpsSource == "Windows")
 		{
 			text += " · Game frame rate: on";

@@ -113,6 +113,12 @@ public static partial class Templates
 		return new List<ScreenLayout>
 		{
 			CommandCenter(),
+			Machined(),
+			RetroRack(),
+			Clearance(),
+			Jellyfish(),
+			StationClock(),
+			SportDial(),
 			Airframe(),
 			InterstellarMicro(),
 			Interstellar(),
@@ -387,6 +393,101 @@ public static partial class Templates
 			Color2 = "#120b08"
 		};
 		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "interstellar", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Machined: orange metal under raised grey plates, engraved readings, sliding discs, blue light.</summary>
+	private static ScreenLayout Machined()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Machined",
+			Description = "Matte orange metal under raised grey plates: the time and date in chamfered figures, readings engraved in the metal, discs sliding with the loads, blue light, a dome and a gear",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#d65428",
+			Color2 = "#d65428"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "machined", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Retro Rack: a wall of matte orange devices with knobs, a moon porthole, a speaker and a fan.</summary>
+	private static ScreenLayout RetroRack()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Retro Rack",
+			Description = "A wall of orange devices: technical screen with the readings, knobs, tonight's moon in a porthole, temperature dials, a speaker and a fan turning with your fans",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#1e100a",
+			Color2 = "#1e100a"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "retrorack", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Clearance: a yellow road-signage poster with huge chamfered figures, a red block, hazard stripes and trucks.</summary>
+	private static ScreenLayout Clearance()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Clearance",
+			Description = "Yellow signage poster: huge chamfered CPU, GPU and time figures, memory as a red block, hazard stripes, warning signs and trucks",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#f3c71c",
+			Color2 = "#f3c71c"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "clearance", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+	/// <summary>Jellyfish: a living jellyfish in dark water that pulses with the processor, glows with the heat and streams light with the graphics load; the time in fluted chrome.</summary>
+	private static ScreenLayout Jellyfish()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Jellyfish",
+			Description = "A living jellyfish: pulses with the CPU, glows hotter with the temperature, streams light with the GPU; fluted chrome time",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#16191d",
+			Color2 = "#16191d"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "jellyfish", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Station Clock: a big white railway-style clock with a sweeping red second hand, and five white gauge dials.</summary>
+	private static ScreenLayout StationClock()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Station Clock",
+			Description = "A white railway-style clock whose red second hand sweeps and waits at twelve, beside five gauge dials",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#dcdddf",
+			Color2 = "#dcdddf"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "station", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Sport Dial: a sports smartwatch stretched wide, split black and cream, with lume hands and segment meters.</summary>
+	private static ScreenLayout SportDial()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Sport Dial",
+			Description = "A sports watch stretched wide: black and cream halves, lume hands, date window, segment meters",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#0a0a0b",
+			Color2 = "#0a0a0b"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "sportdial", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
 		return l;
 	}
 

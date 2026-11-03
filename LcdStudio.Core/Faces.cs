@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -21,7 +21,7 @@ public sealed partial class Faces : IDisposable
 	}
 
 	/// <summary>Faces that are a whole picture in themselves (stone, paper, their own light), which keep it over any background.</summary>
-	public static readonly HashSet<string> OwnBackdrop = new HashSet<string> { "Carved", "Deer", "Headline", "Lightbeam", "Airframe", "Analog Dial" };
+	public static readonly HashSet<string> OwnBackdrop = new HashSet<string> { "Carved", "Deer", "Headline", "Lightbeam", "Airframe", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter" };
 
 	/// <summary>Whether this face shows the fan's background behind it.</summary>
 	public static bool TakesBackground(string face) => !OwnBackdrop.Contains(face);
@@ -46,7 +46,7 @@ public sealed partial class Faces : IDisposable
 	public static readonly string[] Names =
 	{
 		"Glass Slab", "Fading", "Molten Glass", "Neon Ring", "Dot Matrix", "Carved", "Liquid", "Reactor", "3D Number", "Light on Text",
-		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Mission Control", "Interstellar", "Airframe", "Dot Time", "Rolling Time", "Analog Dial", "Lottie Gauge", "Image / GIF"
+		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Mission Control", "Interstellar", "Airframe", "Dot Time", "Rolling Time", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter", "Lottie Gauge", "Image / GIF"
 	};
 
 	private readonly Dictionary<string, Image?> _images = new Dictionary<string, Image>();
@@ -107,6 +107,10 @@ public sealed partial class Faces : IDisposable
 			"Dot Time" => (First: "Dots", Second: "Accent"),
 			"Rolling Time" => (First: "Text", Second: "Accent"),
 			"Analog Dial" => (First: "Dial", Second: "Accent"),
+			"Station Clock" => (First: "Dial", Second: "Second hand"),
+			"Sport Dial" => (First: "Cream", Second: "Accent"),
+			"Rack Porthole" => (First: "Plate", Second: "Cream"),
+			"Rack Meter" => (First: "Plate", Second: "Needle"),
 			"Lottie Gauge" => (First: "Start", Second: "End"),
 			_ => (First: "Text", Second: "Tint"), 
 		};
@@ -141,6 +145,10 @@ public sealed partial class Faces : IDisposable
 			"Dot Time" => ("#ffffff", "#ff4b2b"),
 			"Rolling Time" => ("#ffffff", "#ff4b2b"),
 			"Analog Dial" => ("#f1f0ec", "#ff4b2b"),
+			"Station Clock" => ("#f6f6f4", "#de261c"),
+			"Sport Dial" => ("#ece8cf", "#e8472c"),
+			"Rack Porthole" => ("#f06c2e", "#ece8dc"),
+			"Rack Meter" => ("#f06c2e", "#d8261a"),
 			"Lottie Gauge" => ("#3af0ff", "#ff3d8b"),
 			_ => ("#ffffff", "#000000"), 
 		};
@@ -389,6 +397,18 @@ public sealed partial class Faces : IDisposable
 			break;
 		case "Analog Dial":
 			AnalogDialFace(x);
+			break;
+		case "Station Clock":
+			StationFace(x);
+			break;
+		case "Sport Dial":
+			SportDialFace(x);
+			break;
+		case "Rack Porthole":
+			RackPortholeFace(x);
+			break;
+		case "Rack Meter":
+			RackMeterFace(x);
 			break;
 		case "Lottie Gauge":
 			LottieGauge(x, image);

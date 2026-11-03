@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -119,7 +119,7 @@ public sealed class HomePage : Page
 		_health.Controls.Add(_healthText);
 		_health.Visible = false;
 		Body.SetFlowBreak(_health, value: true);
-		// without administrator rights (or, on Ryzen 9000, the PawnIO driver) Windows gives no CPU temperature, and the
+		// without administrator rights and the PawnIO driver (on any processor) Windows gives no CPU temperature, and the
 		// layouts show "--" for it; this says so and offers the fix, instead of leaving it a mystery
 		_cpuHint = AddCard("CPU temperature", 1080);
 		_cpuHintText = new Caption("", Theme.Text, Theme.Body) { AutoSize = false, Size = new Size(Theme.S(1040f), Theme.S(44f)) };
@@ -214,7 +214,7 @@ public sealed class HomePage : Page
 			BackColor = Theme.Card,
 			Margin = Padding.Empty
 		};
-		_fanEmpty = new Caption("No fan screens found.", Theme.SubText)
+		_fanEmpty = new Caption("No fan screens found. Each LCD fan's USB cable must be plugged in; the wireless dongle can't carry pictures.", Theme.SubText)
 		{
 			Margin = new Padding(0, Theme.S(6f), 0, Theme.S(6f))
 		};
@@ -462,11 +462,14 @@ public sealed class HomePage : Page
 		if (_cpuHint.Visible != missing)
 		{
 			bool admin = SettingsPage.IsAdmin();
-			_cpuHintText.Text = admin
-				? "Windows isn't giving LumaLi the CPU temperature, so layouts show \"--\" for it. On Ryzen 9000 (and some other new processors) it also needs the free PawnIO driver: install it, then restart LumaLi."
+			bool pawn = LcdStudio.Core.Sensors.PawnIoInstalled;
+			_cpuHintText.Text = !pawn
+				? "The CPU temperature needs the free PawnIO driver on every processor, Intel and AMD alike" + (admin ? "" : ", and LumaLi running as administrator") + ". Until then layouts show \"--\" for it. Install PawnIO (or: winget install namazso.PawnIO), restart the PC, then start LumaLi" + (admin ? " again." : " as administrator.")
+				: admin
+				? "PawnIO is installed and LumaLi runs as administrator, but Windows still gives no CPU temperature. Restart the PC once after installing PawnIO. If it stays \"--\", copy the device report (Settings › Devices) into a GitHub issue."
 				: "The CPU temperature needs LumaLi to run as administrator; until then layouts show \"--\" for it (the game frame rate needs it too). Restart it as administrator; to start that way every time, then turn on Settings › App › \"…as administrator\".";
 			_cpuHintAdmin.Visible = !admin;
-			_cpuHintDriver.Visible = admin;
+			_cpuHintDriver.Visible = !pawn;
 			_cpuHint.Visible = missing;
 		}
 		List<string> notes = E.Settings.Smart.HealthWatch ? E.HealthNotes : new List<string>();

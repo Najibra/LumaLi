@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -85,6 +85,32 @@ public sealed class Sensors : IDisposable
 	public int CoreCount { get; private set; }
 
 	public bool CpuTempAvailable => _values.ContainsKey("cpu.temp");
+
+	/// <summary>The processor's temperature sensors as LibreHardwareMonitor sees them (name=value), for the device report.</summary>
+	public string CpuTempSensors { get; private set; } = "(processor not read yet)";
+
+	/// <summary>
+	/// Whether the PawnIO driver is installed. LibreHardwareMonitor 0.9.5+ reads every processor's temperature (Intel and
+	/// AMD alike) through PawnIO instead of WinRing0, so without it there is no CPU temperature even as administrator.
+	/// </summary>
+	public static bool PawnIoInstalled
+	{
+		get
+		{
+			try
+			{
+				using Microsoft.Win32.RegistryKey? k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\PawnIO");
+				if (k != null)
+				{
+					return true;
+				}
+			}
+			catch
+			{
+			}
+			return System.IO.File.Exists(System.IO.Path.Combine(Environment.SystemDirectory, "drivers", "PawnIO.sys"));
+		}
+	}
 
 	public DateTime Started { get; } = DateTime.Now;
 
@@ -331,7 +357,9 @@ public sealed class Sensors : IDisposable
 
 	private void Cpu(IHardware hw)
 	{
-		List<ISensor> source = hw.Sensors.Where((ISensor s) => s.SensorType == SensorType.Temperature && s.Value > 0f).ToList();
+		List<ISensor> temps = hw.Sensors.Where((ISensor s) => s.SensorType == SensorType.Temperature).ToList();
+		CpuTempSensors = temps.Count == 0 ? "(none)" : string.Join(", ", temps.Take(12).Select((ISensor s) => s.Name + "=" + (s.Value.HasValue ? s.Value.Value.ToString("0", System.Globalization.CultureInfo.InvariantCulture) : "none")));
+		List<ISensor> source = temps.Where((ISensor s) => s.Value > 0f).ToList();
 		ISensor sensor = source.FirstOrDefault((ISensor s) => s.Name.Contains("Tctl")) ?? source.FirstOrDefault((ISensor s) => s.Name.Contains("Package")) ?? source.FirstOrDefault((ISensor s) => s.Name.Contains("CCD")) ?? source.FirstOrDefault((ISensor s) => s.Name.Contains("Core"));
 		if (sensor != null)
 		{

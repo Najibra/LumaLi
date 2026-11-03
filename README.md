@@ -41,7 +41,7 @@ One small `.exe`, no installer, no account, no telemetry.
 
 ![New fan faces](docs/fan-faces-new.jpg)
 
-Full list: [release notes](docs/RELEASE-NOTES-1.3.0.md). **1.3.1** adds experimental Lancool 207 Digital screen support and starting as administrator at sign-in ([notes](docs/RELEASE-NOTES-1.3.1.md)).
+Full list: [release notes](docs/RELEASE-NOTES-1.3.0.md). **1.3.1** adds experimental Lancool 207 Digital screen support and starting as administrator at sign-in ([notes](docs/RELEASE-NOTES-1.3.1.md)). **1.3.2** fixes the CPU temperature on Intel (PawnIO), adds SL V3 Wireless LCD fan screens (experimental) and six new layouts ([notes](docs/RELEASE-NOTES-1.3.2.md)).
 
 ## Why LumaLi
 
@@ -85,7 +85,7 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 | ![Deer](docs/layouts/deer.jpg) **Deer** — a dotted LED dashboard | ![Carousel](docs/layouts/carousel.jpg) **Carousel** — a turning carousel of glass cards |
 | ![Right Now](docs/layouts/right-now.jpg) **Right Now** — poster numbers that stamp on every change | ![Eclipse](docs/layouts/eclipse.jpg) **Eclipse** — sunrise over a planet's edge |
 
-…plus Mission Control, Interstellar, Interstellar Micro and Airframe (above), Lightbeam (top of this page), nine vertical layouts, Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
+…plus Machined, Retro Rack, Clearance, Jellyfish, Station Clock and Sport Dial (new in 1.3.2), Mission Control, Interstellar, Interstellar Micro and Airframe (above), Lightbeam (top of this page), nine vertical layouts, Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
 
 ### Fan screens (400 × 400)
 
@@ -111,12 +111,15 @@ LumaLi talks to specific devices over USB. It does **not** support every Lian Li
 | Universal Screen 8.8" | `1CBE:A088` | ✅ Supported and tested |
 | Light strip around the 8.8" screen | `0416:8050` | ✅ Supported and tested |
 | UNI FAN TL Wireless LCD — fan screens | `1CBE:0006` | ✅ Supported and tested (five fans) |
+| UNI FAN SL Wireless LCD (SL V3) — fan screens | `1CBE:0005` | 🧪 Experimental (1.3.2), untested — reports welcome |
 | Wireless controller/dongle — fan lighting and speed | `0416:8040` / `0416:8041` | ✅ Tested with TL Wireless fans · ⚠️ SL Wireless, SL-INF and CL wireless groups are recognised but untested |
 | TL Flex LCD / SL Infinity Flex LCD — fan screens | `1CBE:A018` / `1CBE:A019` | 🧪 Experimental (1.2), untested — reports welcome |
 | Wired TL LCD fans — fan screens | `04FC:7393` | 🧪 Experimental (1.2), untested — reports welcome |
 | Lancool 207 Digital — front screen | `1CBE:A065` | 🧪 Experimental (1.3.1), untested — shows your layouts when no 8.8" screen is connected |
 | Turzx screens | — | ⏳ Not yet — please send a device report |
 | Wired UNI HUB controllers, Galahad / HydroShift LCD coolers, Strimer, O11 Vision and other screens | — | ❌ Not supported |
+
+A wireless LCD fan's screen is its own USB device: it works only while that fan's USB cable is plugged into a motherboard USB 2.0 header or hub. The wireless dongle carries lighting and speed, not pictures.
 
 If you own a device marked untested or not supported and would like to help, please open an issue and paste the report from **Settings → Devices → Copy device report**.
 
@@ -127,7 +130,7 @@ If you own a device marked untested or not supported and would like to help, ple
 3. Close L-Connect (and turn off its start-with-Windows option).
 4. Run `LumaLi.exe`. On first launch your current fan lighting and fan speeds are left as they are until you change them.
 
-Settings, layouts and uploads are kept in `%APPDATA%\LumaLi`. CPU temperature needs LumaLi to run as administrator (Settings → Restart as administrator); everything else works without it. To start it as administrator at every sign-in, turn on Settings → App → "…as administrator". On Ryzen 9000 the CPU temperature also needs the free [PawnIO](https://pawnio.eu) driver.
+Settings, layouts and uploads are kept in `%APPDATA%\LumaLi`. CPU temperature needs LumaLi to run as administrator (Settings → Restart as administrator); everything else works without it. To start it as administrator at every sign-in, turn on Settings → App → "…as administrator". The CPU temperature also needs the free [PawnIO](https://pawnio.eu) driver on every processor, Intel and AMD (`winget install namazso.PawnIO`, then restart the PC).
 
 ## Building from source
 

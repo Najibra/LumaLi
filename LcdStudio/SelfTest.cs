@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -223,6 +223,8 @@ internal static class SelfTest
 			case "Clock":
 			case "Dot Time":
 			case "Rolling Time":
+			case "Station Clock":
+			case "Sport Dial":
 			case "Image / GIF":
 			case "Lottie Gauge":
 			case "Carved":
