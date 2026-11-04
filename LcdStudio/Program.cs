@@ -49,7 +49,7 @@ public static class Program
 			List<UsbDeviceInfo> devices = WinUsb.Enumerate().Where(delegate(UsbDeviceInfo d)
 			{
 				DeviceKind kind = d.Kind;
-				return ((uint)kind <= 1u || (uint)(kind - 3) <= 1u) ? true : false;
+				return ((uint)kind <= 1u || (uint)(kind - 3) <= 1u || kind == DeviceKind.Trofeo) ? true : false;
 			}).ToList();
 			try
 			{

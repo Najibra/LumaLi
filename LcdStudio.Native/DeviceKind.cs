@@ -15,5 +15,10 @@ public enum DeviceKind
 	/// The Lancool 207 Digital's front screen (1CBE:A065), 720 × 1472, speaking the 8.8" screen's protocol. Used as the
 	/// screen when no 8.8" screen is connected.
 	/// </summary>
-	CaseLcd
+	CaseLcd,
+	/// <summary>
+	/// A Thermalright Trofeo Vision 9.16" (0416:5408 "LY" and 0416:5409 "LY1"), 1920 × 462 or 1920 × 440. Speaks its
+	/// own chunked bulk protocol, not the 8.8" screen's, so it gets its own link.
+	/// </summary>
+	Trofeo
 }

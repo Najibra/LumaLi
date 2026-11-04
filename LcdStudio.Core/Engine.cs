@@ -490,12 +490,17 @@ public sealed class Engine : IDisposable
 			string main = Settings.MainScreen;
 			List<UsbDeviceInfo> screens = Devices.Where((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen)
 				.OrderBy((UsbDeviceInfo d) => d.Serial.Equals(main, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
-			UsbDeviceInfo screen = screens.FirstOrDefault() ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.CaseLcd);
+			UsbDeviceInfo screen = screens.FirstOrDefault() ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.CaseLcd) ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Trofeo);
 			CancellationToken token = _run.Token;
 			Screen.Present = screen != null;
 			Screen.Serial = screen?.Serial ?? "";
 			Screen.Kind = screen?.Kind ?? DeviceKind.Screen;
-			Screen.Name = Screen.Kind == DeviceKind.CaseLcd ? "Lancool 207 screen (experimental)" : screens.Count > 1 ? "8.8\" screen 1" : "8.8\" screen";
+			Screen.Name = Screen.Kind switch
+			{
+				DeviceKind.CaseLcd => "Lancool 207 screen (experimental)",
+				DeviceKind.Trofeo => "Thermalright Trofeo Vision 9.16\"",
+				_ => screens.Count > 1 ? "8.8\" screen 1" : "8.8\" screen"
+			};
 			Screen.State = ((screen == null) ? "not found" : "starting");
 			if (screen != null)
 			{
@@ -1014,9 +1019,12 @@ public sealed class Engine : IDisposable
 	{
 		using ScreenRenderer screenRenderer = new ScreenRenderer(Sensors);
 		AutoResetEvent wake = NewWake();
-		LcdLink lcdLink = null;
+		IScreenLink lcdLink = null;
 		FpsCounter fpsCounter = new FpsCounter();
 		int num = 500;
+		// a still picture is re-sent now and then: the 8.8" screen keeps it, the Trofeo falls back to its own logo after
+		// two or three seconds without a frame, so it needs one every few hundred milliseconds
+		double hold = ((info.Kind == DeviceKind.Trofeo) ? 0.4 : 2.0);
 		string text = null;
 		byte[] array = null;
 		DateTime dateTime = DateTime.MinValue;
@@ -1074,7 +1082,7 @@ public sealed class Engine : IDisposable
 				{
 					if (lcdLink == null)
 					{
-						lcdLink = new LcdLink(info);
+						lcdLink = ((info.Kind == DeviceKind.Trofeo) ? ((IScreenLink)new TrofeoLink(info)) : new LcdLink(info));
 					}
 					ScreenLayout screenLayout;
 					bool flip;
@@ -1116,7 +1124,7 @@ public sealed class Engine : IDisposable
 					}
 					bool flag = ScreenRenderer.IsAnimated(screenLayout);
 					string text2 = (flag || fading || identify ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), flip, Settings.ScreenQuality, brightness));
-					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < 2.0)
+					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < hold)
 					{
 						Wait(ct, 100, wake);
 						continue;
@@ -1161,6 +1169,13 @@ public sealed class Engine : IDisposable
 							using Bitmap fitted = CaseFrame(bitmap, screenLayout.Portrait, flip);
 							array2 = Imaging.Jpeg(fitted, Settings.ScreenQuality);
 						}
+						// the Trofeo's 1920 × 462 strip: the layout is filled whole width and cropped by 9 px top and bottom,
+						// then turned by the angle the wire frame needs (see TrofeoFrame)
+						else if (info.Kind == DeviceKind.Trofeo)
+						{
+							using Bitmap strip = TrofeoFrame(bitmap, screenLayout.Portrait, brightness, flip, (TrofeoLink)lcdLink);
+							array2 = Imaging.Jpeg(strip, Settings.ScreenQuality);
+						}
 						else
 						{
 						// the panel itself is 480 × 1920: a wide frame turns a quarter, a vertical one is already upright
@@ -1183,7 +1198,7 @@ public sealed class Engine : IDisposable
 					long w0 = Stopwatch.GetTimestamp();
 					Sent();
 					timing.Waited += Stopwatch.GetElapsedTime(w0).TotalMilliseconds;
-					LcdLink link = lcdLink;
+					IScreenLink link = lcdLink;
 					byte[] frame = array2;
 					int level = brightness;
 					sending = Task.Run(() =>
@@ -1977,6 +1992,62 @@ public sealed class Engine : IDisposable
 	}
 
 	/// <summary>
+	/// A layout frame made ready for a Thermalright Trofeo Vision 9.16" (1920 × 462 or 1920 × 440). Unlike the Lancool
+	/// panel, this one is meant to be filled: the layout is scaled to cover the canvas and the few pixels that overflow
+	/// are cropped, so nothing is squeezed (a 1920 × 480 layout loses 9 px at the top and 9 at the bottom). A narrower
+	/// panel — the 1280 × 480 6.86" — is shown whole instead, with bars, since covering it would crop a third of the
+	/// width. The canvas is laid out in the orientation the wire's turn lands on, then turned, because the panel expects
+	/// a sideways frame; the brightness is baked into the picture since the wire has no brightness command.
+	/// </summary>
+	public static Bitmap TrofeoFrame(Bitmap frame, bool portrait, int brightness, bool flip, TrofeoLink link)
+	{
+		Size panel = link.PanelSize;
+		int angle = link.EncodeAngle(flip);
+		// the wire turns the whole picture before encoding; compose on the canvas that turn lands on the panel
+		bool transposed = angle % 180 == 90;
+		int w = transposed ? panel.Height : panel.Width;
+		int h = transposed ? panel.Width : panel.Height;
+		bool canvasPortrait = h > w;
+		if (portrait != canvasPortrait)
+		{
+			frame.RotateFlip(flip ? RotateFlipType.Rotate270FlipNone : RotateFlipType.Rotate90FlipNone);
+		}
+		Bitmap result = new Bitmap(w, h);
+		using (Graphics g = Graphics.FromImage(result))
+		{
+			g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+			g.PixelOffsetMode = PixelOffsetMode.Half;
+			// a panel as wide as the layout takes it 1:1 and loses the few pixels that overflow; a narrower one (the
+			// 1280 × 480 6.86") would lose a third of the layout that way, so it gets the whole layout with bars
+			float cover = Math.Max((float)w / frame.Width, (float)h / frame.Height);
+			float fit = Math.Min((float)w / frame.Width, (float)h / frame.Height);
+			float scale = ((frame.Width > w) ? fit : cover);
+			float cw = frame.Width * scale, ch = frame.Height * scale;
+			g.DrawImage(frame, (w - cw) / 2f, (h - ch) / 2f, cw, ch);
+			// the strip has no brightness command, so the picture itself is dimmed
+			int dim = Math.Clamp(brightness, 0, 100);
+			if (dim < 100)
+			{
+				using SolidBrush shade = new SolidBrush(Color.FromArgb((100 - dim) * 255 / 100, 0, 0, 0));
+				g.FillRectangle(shade, 0, 0, w, h);
+			}
+		}
+		if (angle == 90)
+		{
+			result.RotateFlip(RotateFlipType.Rotate90FlipNone);
+		}
+		else if (angle == 180)
+		{
+			result.RotateFlip(RotateFlipType.Rotate180FlipNone);
+		}
+		else if (angle == 270)
+		{
+			result.RotateFlip(RotateFlipType.Rotate270FlipNone);
+		}
+		return result;
+	}
+
+	/// <summary>
 	/// A layout frame made ready for a Lancool 207 Digital's 720 × 1472 panel, which sits landscape (1472 × 720) in the
 	/// case. The whole layout is shown, scaled to fit; the space it leaves holds a darkened, stretched copy of the same
 	/// frame, so the edges carry the layout's colours instead of black bars. Wide layouts turn a quarter like on the 8.8"
@@ -2033,7 +2104,7 @@ public sealed class Engine : IDisposable
 		List<UsbDeviceInfo> list = new List<UsbDeviceInfo>();
 		if (Screen.State.Contains("not responding"))
 		{
-			list.AddRange(Devices.Where((UsbDeviceInfo d) => (d.Kind == DeviceKind.Screen || d.Kind == DeviceKind.CaseLcd) && d.Serial == Screen.Serial));
+			list.AddRange(Devices.Where((UsbDeviceInfo d) => (d.Kind == DeviceKind.Screen || d.Kind == DeviceKind.CaseLcd || d.Kind == DeviceKind.Trofeo) && d.Serial == Screen.Serial));
 		}
 		if (Wireless.State.Contains("not responding"))
 		{

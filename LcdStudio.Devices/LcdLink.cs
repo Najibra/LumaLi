@@ -9,7 +9,7 @@ using LcdStudio.Native;
 
 namespace LcdStudio.Devices;
 
-public sealed class LcdLink : IFanLink
+public sealed class LcdLink : IScreenLink
 {
 	public const int FanPacket = 102400;
 

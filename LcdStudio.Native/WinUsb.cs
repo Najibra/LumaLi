@@ -55,7 +55,7 @@ public sealed class WinUsb : IDisposable
 		public byte Interval;
 	}
 
-	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[9]
+	private static readonly (string Id, DeviceKind Kind)[] Known = new(string, DeviceKind)[11]
 	{
 		// experimental: the Lancool 207 Digital case screen (per sgtaziz/lian-li-linux, the 8.8" protocol at 720 × 1472)
 		("vid_1cbe&pid_a065", DeviceKind.CaseLcd),
@@ -68,7 +68,10 @@ public sealed class WinUsb : IDisposable
 		("vid_0416&pid_8041", DeviceKind.WirelessRx),
 		// experimental: not tried on real hardware yet (per sgtaziz/lian-li-linux, the 8.8" screen's protocol at 400 × 400)
 		("vid_1cbe&pid_a018", DeviceKind.FlexLcd),
-		("vid_1cbe&pid_a019", DeviceKind.FlexLcd)
+		("vid_1cbe&pid_a019", DeviceKind.FlexLcd),
+		// the Thermalright Trofeo Vision 9.16": "LY" and "LY1", the same wire protocol with a different framing
+		("vid_0416&pid_5408", DeviceKind.Trofeo),
+		("vid_0416&pid_5409", DeviceKind.Trofeo)
 	};
 
 	/// <summary>Fan screens of either kind: the wireless LCD fans and the Flex LCDs.</summary>
@@ -259,6 +262,7 @@ public sealed class WinUsb : IDisposable
 				DeviceKind.FanLcd or DeviceKind.FlexLcd or DeviceKind.TlLcd => FanName(d.Kind, ++fan),
 				DeviceKind.WirelessTx => "Wireless transmitter",
 				DeviceKind.CaseLcd => "Lancool 207 Digital screen",
+				DeviceKind.Trofeo => "Thermalright Trofeo Vision 9.16\"",
 				_ => "Wireless receiver",
 			}
 		}).ToList();
