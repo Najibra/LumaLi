@@ -27,8 +27,6 @@ public sealed class TrofeoLink : IScreenLink
 
 	private static readonly byte[] Greeting = BuildGreeting();
 
-	private readonly UsbDeviceInfo _info;
-
 	private readonly bool _ly1;
 
 	private readonly byte[] _scratch = new byte[WriteSize];
@@ -52,7 +50,6 @@ public sealed class TrofeoLink : IScreenLink
 
 	public TrofeoLink(UsbDeviceInfo info)
 	{
-		_info = info;
 		_ly1 = info.Path.Contains("pid_5409", StringComparison.OrdinalIgnoreCase);
 		_usb = new WinUsb(info);
 		try

@@ -208,7 +208,7 @@ public sealed class HomePage : Page
 		});
 		_update.Visible = false;
 		Body.SetFlowBreak(_update, value: true);
-		Card card2 = AddCard("8.8\" screen", 700);
+		Card card2 = AddCard(string.IsNullOrEmpty(E.Screen.Name) ? "Screen" : E.Screen.Name, 700);
 		_screen = new ScreenPreview(E)
 		{
 			Size = new Size(Theme.S(668f), Theme.S(170f)),

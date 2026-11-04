@@ -133,6 +133,7 @@ LumaLi talks to specific devices over USB. It does **not** support every Lian Li
 | TL Flex LCD / SL Infinity Flex LCD — fan screens | `1CBE:A018` / `1CBE:A019` | 🧪 Experimental (1.2), untested — reports welcome |
 | Wired TL LCD fans — fan screens | `04FC:7393` | 🧪 Experimental (1.2), untested — reports welcome |
 | Lancool 207 Digital — front screen | `1CBE:A065` | 🧪 Experimental (1.3.1), untested — shows your layouts when no 8.8" screen is connected |
+| Thermalright Trofeo Vision 9.16" — case screen | `0416:5408` / `0416:5409` | 🧪 Experimental, untested — 1920 × 462 or 1920 × 440 strip; your layouts fill it (a 1920 × 480 layout loses 9 px top and bottom, never stretched) |
 | Turzx screens | — | ⏳ Not yet — please send a device report |
 | Wired UNI HUB controllers, Galahad / HydroShift LCD coolers, Strimer, O11 Vision and other screens | — | ❌ Not supported |
 
