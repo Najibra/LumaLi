@@ -87,6 +87,34 @@ public sealed class Engine : IDisposable
 
 	public List<OutputStatus> FanOutputs { get; } = new List<OutputStatus>();
 
+	/// <summary>The 8.8" screens after the main one (Screen), each with its own layout; usually none.</summary>
+	public List<OutputStatus> ExtraScreens { get; } = new List<OutputStatus>();
+
+	/// <summary>The light strips after the first (each 8.8" screen has one); they play the same lighting.</summary>
+	public List<OutputStatus> ExtraStrips { get; } = new List<OutputStatus>();
+
+	/// <summary>Every screen found, the main one first.</summary>
+	public IEnumerable<OutputStatus> AllScreens => (Screen.Present ? new[] { Screen } : Array.Empty<OutputStatus>()).Concat(ExtraScreens);
+
+	/// <summary>What an extra screen shows: its own layout, or the main screen's when it has none (or it was removed).</summary>
+	public ScreenLayout LayoutForScreen(string serial)
+	{
+		lock (Settings)
+		{
+			string name = Settings.ScreenFor(serial).Layout;
+			return (name.Length == 0 ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == name)) ?? ShownLayout;
+		}
+	}
+
+	private double _identifyScreensUntil = -1.0;
+
+	/// <summary>Each 8.8" screen shows its number for a few seconds, to tell which is which.</summary>
+	public void IdentifyScreens(double seconds = 6.0)
+	{
+		_identifyScreensUntil = Time + seconds;
+		Poke();
+	}
+
 
 	public WirelessHub? Hub { get; private set; }
 
@@ -417,6 +445,22 @@ public sealed class Engine : IDisposable
 		thread.Start();
 	}
 
+	/// <summary>Other lighting software running (for the device report); LumaLi never closes these itself.</summary>
+	public static string[] LightingApps()
+	{
+		string[] known = { "SignalRgb", "OpenRGB", "iCUE", "LightingService", "ArmouryCrate", "NZXT CAM", "MSI.CentralServer", "MysticLight", "RGBFusion", "HydroShift", "UniFan", "LianLi", "Lian Li", "Aura", "Polychrome", "WallpaperEngine", "wallpaper64", "AIDA64", "HWiNFO", "Turzx", "Artemis" };
+		try
+		{
+			return (from p in Process.GetProcesses()
+				where known.Any((string k) => p.ProcessName.Contains(k, StringComparison.OrdinalIgnoreCase))
+				select p.ProcessName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy((string n) => n).ToArray();
+		}
+		catch
+		{
+			return Array.Empty<string>();
+		}
+	}
+
 	public static string[] CompetingProcesses()
 	{
 		try
@@ -441,28 +485,62 @@ public sealed class Engine : IDisposable
 			Devices = OrderFans(WinUsb.Enumerate());
 			string[] array = CompetingProcesses();
 			Warning = ((array.Length != 0) ? (string.Join(", ", array) + " is running and may hold the devices. Close it so LumaLi can take over.") : null);
-			// the 8.8" screen, or else a Lancool 207 Digital's front screen, which then shows the same layouts
-			UsbDeviceInfo screen = Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen) ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.CaseLcd);
+			// the 8.8" screens (the chosen main one first, then by serial), or else a Lancool 207 Digital's front screen,
+			// which then shows the same layouts
+			string main = Settings.MainScreen;
+			List<UsbDeviceInfo> screens = Devices.Where((UsbDeviceInfo d) => d.Kind == DeviceKind.Screen)
+				.OrderBy((UsbDeviceInfo d) => d.Serial.Equals(main, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToList();
+			UsbDeviceInfo screen = screens.FirstOrDefault() ?? Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.CaseLcd);
+			CancellationToken token = _run.Token;
 			Screen.Present = screen != null;
 			Screen.Serial = screen?.Serial ?? "";
 			Screen.Kind = screen?.Kind ?? DeviceKind.Screen;
-			Screen.Name = Screen.Kind == DeviceKind.CaseLcd ? "Lancool 207 screen (experimental)" : "8.8\" screen";
+			Screen.Name = Screen.Kind == DeviceKind.CaseLcd ? "Lancool 207 screen (experimental)" : screens.Count > 1 ? "8.8\" screen 1" : "8.8\" screen";
 			Screen.State = ((screen == null) ? "not found" : "starting");
 			if (screen != null)
 			{
 				Spawn("screen", delegate
 				{
-					ScreenLoop(screen, _run.Token);
+					ScreenLoop(screen, Screen, null, 1, token);
 				});
 			}
-			UsbDeviceInfo strip = Devices.FirstOrDefault((UsbDeviceInfo d) => d.Kind == DeviceKind.ScreenLeds);
+			ExtraScreens.Clear();
+			for (int i = 1; i < screens.Count; i++)
+			{
+				UsbDeviceInfo extra = screens[i];
+				int number = i + 1;
+				OutputStatus status = new OutputStatus { Name = $"8.8\" screen {number}", Serial = extra.Serial, Kind = DeviceKind.Screen, Present = true, State = "starting" };
+				lock (Settings)
+				{
+					Settings.ScreenFor(extra.Serial);
+				}
+				ExtraScreens.Add(status);
+				Spawn(status.Name, delegate
+				{
+					ScreenLoop(extra, status, extra.Serial, number, token);
+				});
+			}
+			List<UsbDeviceInfo> strips = Devices.Where((UsbDeviceInfo d) => d.Kind == DeviceKind.ScreenLeds).ToList();
+			UsbDeviceInfo strip = strips.FirstOrDefault();
 			Strip.Present = strip != null;
+			Strip.Name = strips.Count > 1 ? "Screen light strip 1" : "Screen light strip";
 			Strip.State = ((strip == null) ? "not found" : "starting");
 			if (strip != null)
 			{
 				Spawn("strip", delegate
 				{
-					StripLoop(strip, _run.Token);
+					StripLoop(strip, Strip, token);
+				});
+			}
+			ExtraStrips.Clear();
+			for (int i = 1; i < strips.Count; i++)
+			{
+				UsbDeviceInfo more = strips[i];
+				OutputStatus status = new OutputStatus { Name = $"Screen light strip {i + 1}", Serial = more.Serial, Kind = DeviceKind.ScreenLeds, Present = true, State = "starting" };
+				ExtraStrips.Add(status);
+				Spawn(status.Name, delegate
+				{
+					StripLoop(more, status, token);
 				});
 			}
 			FanOutputs.Clear();
@@ -573,7 +651,6 @@ public sealed class Engine : IDisposable
 	public void Resume()
 	{
 		_farewell = false;
-		_farewellSent = false;
 		if (!_resumeAfterWake)
 		{
 			return;
@@ -595,7 +672,7 @@ public sealed class Engine : IDisposable
 
 	public IEnumerable<OutputStatus> AllOutputs()
 	{
-		return new OutputStatus[3] { Screen, Strip, Wireless }.Concat(FanOutputs);
+		return new OutputStatus[1] { Screen }.Concat(ExtraScreens).Append(Strip).Concat(ExtraStrips).Append(Wireless).Concat(FanOutputs);
 	}
 
 	private void Spawn(string name, Action body)
@@ -933,7 +1010,7 @@ public sealed class Engine : IDisposable
 		}
 	}
 
-	private void ScreenLoop(UsbDeviceInfo info, CancellationToken ct)
+	private void ScreenLoop(UsbDeviceInfo info, OutputStatus status, string? extraSerial, int number, CancellationToken ct)
 	{
 		using ScreenRenderer screenRenderer = new ScreenRenderer(Sensors);
 		AutoResetEvent wake = NewWake();
@@ -953,6 +1030,7 @@ public sealed class Engine : IDisposable
 		Bitmap? fadeFrom = null;
 		double fadeAt = 0.0;
 		const double FadeSeconds = 0.9;
+		bool mineSent = false;
 		using PreciseWait? pause = PreciseWait.Create();
 		void Sent()
 		{
@@ -978,9 +1056,9 @@ public sealed class Engine : IDisposable
 				if (!Settings.ScreenOn)
 				{
 					Drain();
-					Screen.Running = false;
-					Screen.State = "off";
-					Screen.Fps = 0.0;
+					status.Running = false;
+					status.State = "off";
+					status.Fps = 0.0;
 					if (lcdLink != null)
 					{
 						lcdLink.Dispose();
@@ -999,12 +1077,19 @@ public sealed class Engine : IDisposable
 						lcdLink = new LcdLink(info);
 					}
 					ScreenLayout screenLayout;
+					bool flip;
 					standby = StandbyNow();
-					GameTick();
+					bool main = extraSerial == null;
+					if (main)
+					{
+						GameTick();
+					}
 					lock (Settings)
 					{
-						screenLayout = standby ? StandbyLayout() : ShownLayout.Clone();
+						screenLayout = standby ? StandbyLayout() : main ? ShownLayout.Clone() : LayoutForScreen(extraSerial).Clone();
+						flip = main ? Settings.Flip : Settings.ScreenFor(extraSerial).Flip;
 					}
+					bool identify = Time < _identifyScreensUntil;
 					int brightness = standby ? Math.Min(Settings.ScreenBrightness, Settings.Standby.Brightness) : Settings.ScreenBrightness;
 					string nowName = (standby ? "standby|" : "") + screenLayout.Name;
 					if (shownName != null && nowName != shownName && shownBefore != null && shownBefore.Portrait == screenLayout.Portrait)
@@ -1030,7 +1115,7 @@ public sealed class Engine : IDisposable
 						fadeFrom = null;
 					}
 					bool flag = ScreenRenderer.IsAnimated(screenLayout);
-					string text2 = (flag || fading ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
+					string text2 = (flag || fading || identify ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), flip, Settings.ScreenQuality, brightness));
 					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < 2.0)
 					{
 						Wait(ct, 100, wake);
@@ -1050,15 +1135,19 @@ public sealed class Engine : IDisposable
 							double k = Math.Clamp((Time - fadeAt) / FadeSeconds, 0.0, 1.0);
 							Imaging.Blend(bitmap, fadeFrom, (float)(1.0 - k * k * (3.0 - 2.0 * k)));
 						}
+						if (identify)
+						{
+							ScreenNumber(bitmap, number, _identifyScreensUntil - Time);
+						}
 						long r1 = Stopwatch.GetTimestamp();
-						// the light strip, when it matches the screen, takes its colours from this frame as drawn
-						if (Settings.Lighting.StripMatchesScreen && Strip.Present)
+						// the light strip, when it matches the screen, takes its colours from this frame as drawn (screen 1's)
+						if (main && Settings.Lighting.StripMatchesScreen && Strip.Present)
 						{
 							if (screenLayout.Portrait)
 							{
 								// the strip runs along the screen as it sits in landscape, so it reads a vertical frame turned back
 								using Bitmap wide = (Bitmap)bitmap.Clone();
-								wide.RotateFlip(Settings.Flip ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
+								wide.RotateFlip(flip ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
 								_screenGlow = Lighting.FromScreen(wide, StripLeds);
 							}
 							else
@@ -1069,7 +1158,7 @@ public sealed class Engine : IDisposable
 						// a Lancool 207's 720 × 1472 panel: the layout is fitted whole (see CaseFrame)
 						if (info.Kind == DeviceKind.CaseLcd)
 						{
-							using Bitmap fitted = CaseFrame(bitmap, screenLayout.Portrait, Settings.Flip);
+							using Bitmap fitted = CaseFrame(bitmap, screenLayout.Portrait, flip);
 							array2 = Imaging.Jpeg(fitted, Settings.ScreenQuality);
 						}
 						else
@@ -1077,14 +1166,14 @@ public sealed class Engine : IDisposable
 						// the panel itself is 480 × 1920: a wide frame turns a quarter, a vertical one is already upright
 						if (screenLayout.Portrait)
 						{
-							if (Settings.Flip)
+							if (flip)
 							{
 								bitmap.RotateFlip(RotateFlipType.Rotate180FlipNone);
 							}
 						}
 						else
 						{
-							bitmap.RotateFlip((!Settings.Flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
+							bitmap.RotateFlip((!flip) ? RotateFlipType.Rotate90FlipNone : RotateFlipType.Rotate270FlipNone);
 						}
 						array2 = Imaging.Jpeg(bitmap, Settings.ScreenQuality);
 						}
@@ -1104,7 +1193,7 @@ public sealed class Engine : IDisposable
 						timing.Send += Stopwatch.GetElapsedTime(s0).TotalMilliseconds;
 					});
 					// going to sleep or shutting down: the standby face is on the screen; start its own clock if asked, then signal
-					if (_farewell && standby && !_farewellSent)
+					if (_farewell && standby && !mineSent)
 					{
 						Sent();
 						if (Settings.Standby.FirmwareClock)
@@ -1118,24 +1207,32 @@ public sealed class Engine : IDisposable
 								Log.Write("screen clock: " + ex2.Message);
 							}
 						}
-						_farewellSent = true;
-						_farewellDone.Set();
+						mineSent = true;
+						// every running screen signals once; the last one lets the PC go to sleep
+						if (Interlocked.Decrement(ref _farewellLeft) <= 0)
+						{
+							_farewellDone.Set();
+						}
+					}
+					else if (!_farewell)
+					{
+						mineSent = false;
 					}
 					text = text2;
 					array = array2;
 					dateTime = DateTime.UtcNow;
-					Screen.Firmware = lcdLink.Firmware;
-					Screen.Running = true;
-					Screen.Fps = fpsCounter.Tick();
-					Screen.State = (flag ? $"connected · {Screen.Fps:0} fps" : "connected · redraws when values change");
+					status.Firmware = lcdLink.Firmware;
+					status.Running = true;
+					status.Fps = fpsCounter.Tick();
+					status.State = (flag ? $"connected · {status.Fps:0} fps" : "connected · redraws when values change");
 					num = 500;
 				}
 				catch (Exception ex) when (!(ex is OperationCanceledException))
 				{
 					Drain();
-					Screen.Running = false;
-					Screen.Fps = 0.0;
-					Screen.State = "error: " + Short(ex);
+					status.Running = false;
+					status.Fps = 0.0;
+					status.State = "error: " + Short(ex);
 					Log.Write("screen: " + ex.Message);
 					lcdLink?.Dispose();
 					lcdLink = null;
@@ -1160,7 +1257,7 @@ public sealed class Engine : IDisposable
 				// every five minutes or so, where a frame's time goes, for when the screen falls short of its frame rate
 				if (++timing.Frames == 9000)
 				{
-					Log.Write($"screen timing per frame: render {timing.Render / 9000:0.0} ms, encode {timing.Encode / 9000:0.0}, waiting on USB {timing.Waited / 9000:0.0}, send {timing.Send / 9000:0.0}, sleep {timing.Slept / 9000:0.0}; {Screen.Fps:0.0} fps");
+					Log.Write($"screen timing per frame: render {timing.Render / 9000:0.0} ms, encode {timing.Encode / 9000:0.0}, waiting on USB {timing.Waited / 9000:0.0}, send {timing.Send / 9000:0.0}, sleep {timing.Slept / 9000:0.0}; {status.Fps:0.0} fps");
 					timing = new ScreenTiming();
 				}
 			}
@@ -1169,7 +1266,7 @@ public sealed class Engine : IDisposable
 		{
 			Drain();
 			// after a farewell the screen keeps the standby face (or its own clock): let go without stopping it
-			if (_farewellSent)
+			if (mineSent)
 			{
 				lcdLink?.Leave();
 			}
@@ -1177,11 +1274,35 @@ public sealed class Engine : IDisposable
 			{
 				lcdLink?.Dispose();
 			}
-			Screen.Running = false;
+			status.Running = false;
 		}
 	}
 
-	private volatile bool _locked, _farewell, _farewellSent;
+	private volatile bool _locked, _farewell;
+
+	private int _farewellLeft;
+
+	/// <summary>Draws a big "SCREEN n" over a frame, so the owner can tell the screens apart; fades out at the end.</summary>
+	private static void ScreenNumber(Bitmap bitmap, int number, double left)
+	{
+		using Graphics g = Graphics.FromImage(bitmap);
+		g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+		int alpha = (int)(255 * Math.Clamp(left / 0.5, 0.0, 1.0));
+		using (SolidBrush shade = new SolidBrush(Color.FromArgb(alpha * 200 / 255, 8, 8, 10)))
+		{
+			g.FillRectangle(shade, 0, 0, bitmap.Width, bitmap.Height);
+		}
+		float size = Math.Min(bitmap.Width, bitmap.Height) * 0.42f;
+		using Font big = new Font("Segoe UI", size, FontStyle.Bold, GraphicsUnit.Pixel);
+		using Font small = new Font("Segoe UI", size * 0.22f, FontStyle.Regular, GraphicsUnit.Pixel);
+		using StringFormat center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+		float cx = bitmap.Width / 2f, cy = bitmap.Height / 2f;
+		using SolidBrush white = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+		using SolidBrush accent = new SolidBrush(Color.FromArgb(alpha, 255, 75, 43));
+		g.DrawString("SCREEN", small, accent, new RectangleF(0, cy - size * 0.62f, bitmap.Width, size * 0.3f), center);
+		g.DrawString(number.ToString(), big, white, new RectangleF(0, cy - size * 0.42f, bitmap.Width, size * 1.1f), center);
+	}
 
 	private readonly ManualResetEventSlim _farewellDone = new ManualResetEventSlim(false);
 
@@ -1239,11 +1360,12 @@ public sealed class Engine : IDisposable
 	/// </summary>
 	public void Farewell()
 	{
-		if (!Settings.Standby.Enabled || !Settings.Standby.BeforeSleep || !Screen.Running)
+		int running = AllScreens.Count((OutputStatus s) => s.Running);
+		if (!Settings.Standby.Enabled || !Settings.Standby.BeforeSleep || running == 0)
 		{
 			return;
 		}
-		_farewellSent = false;
+		Volatile.Write(ref _farewellLeft, running);
 		_farewellDone.Reset();
 		_farewell = true;
 		Poke();
@@ -1257,7 +1379,8 @@ public sealed class Engine : IDisposable
 		{
 			return "not responding — use Settings › Restart stuck devices, or replug it";
 		}
-		if (message.Length <= 90)
+		// why a device would not open is kept whole: it says what to close
+		if (message.Length <= 90 || (e is Win32Exception && message.Length <= 220))
 		{
 			return message;
 		}
@@ -1409,7 +1532,7 @@ public sealed class Engine : IDisposable
 	/// <summary>The light strip's colours from the latest screen frame, set by the screen loop while the strip matches it.</summary>
 	private volatile (byte R, byte G, byte B)[]? _screenGlow;
 
-	private void StripLoop(UsbDeviceInfo info, CancellationToken ct)
+	private void StripLoop(UsbDeviceInfo info, OutputStatus status, CancellationToken ct)
 	{
 		LedStrip ledStrip = null;
 		// what the strip shows while matching the screen, eased toward each new frame so it glides rather than steps
@@ -1473,9 +1596,9 @@ public sealed class Engine : IDisposable
 							frame[i] = ((byte)(shown[i * 3] * level), (byte)(shown[i * 3 + 1] * level), (byte)(shown[i * 3 + 2] * level));
 						}
 						ledStrip.Send(frame);
-						Strip.Running = true;
-						Strip.Fps = fpsCounter.Tick();
-						Strip.State = "following the monitor's colours";
+						status.Running = true;
+						status.Fps = fpsCounter.Tick();
+						status.State = "following the monitor's colours";
 						NextFrame();
 						continue;
 					}
@@ -1493,23 +1616,23 @@ public sealed class Engine : IDisposable
 							frame[i] = ((byte)(shown[i * 3] * level), (byte)(shown[i * 3 + 1] * level), (byte)(shown[i * 3 + 2] * level));
 						}
 						ledStrip.Send(frame);
-						Strip.Running = true;
-						Strip.Fps = fpsCounter.Tick();
-						Strip.State = "matching the screen layout";
+						status.Running = true;
+						status.Fps = fpsCounter.Tick();
+						status.State = "matching the screen layout";
 						NextFrame();
 						continue;
 					}
 					if (!Settings.Lighting.Applied)
 					{
-						Strip.State = lighting.StripMatchesScreen ? "waiting for the screen" : "waiting (choose lighting to start)";
+						status.State = lighting.StripMatchesScreen ? "waiting for the screen" : "waiting (choose lighting to start)";
 						Wait(ct, 1000, autoResetEvent);
 						continue;
 					}
 					double phase = Time / Lighting.LoopSeconds(effectSettings.Speed) % 1.0;
 					ledStrip.Send(StripScenes.Has(text) ? StripScenes.Frame(text, effectSettings, StripLeds, Time) : Lighting.Frame(text, effectSettings, 1, 60, phase));
-					Strip.Running = true;
-					Strip.Fps = fpsCounter.Tick();
-					Strip.State = ((text == "Off") ? "off" : (text ?? ""));
+					status.Running = true;
+					status.Fps = fpsCounter.Tick();
+					status.State = ((text == "Off") ? "off" : (text ?? ""));
 					if (Lighting.IsAnimated(text))
 					{
 						NextFrame();
@@ -1521,8 +1644,8 @@ public sealed class Engine : IDisposable
 				}
 				catch (Exception ex) when (!(ex is OperationCanceledException))
 				{
-					Strip.Running = false;
-					Strip.State = "error: " + Short(ex);
+					status.Running = false;
+					status.State = "error: " + Short(ex);
 					Log.Write("strip: " + ex.Message);
 					ledStrip?.Dispose();
 					ledStrip = null;
@@ -1534,7 +1657,7 @@ public sealed class Engine : IDisposable
 		finally
 		{
 			ledStrip?.Dispose();
-			Strip.Running = false;
+			status.Running = false;
 		}
 	}
 

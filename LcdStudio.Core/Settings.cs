@@ -79,6 +79,25 @@ public sealed class Settings
 	/// <summary>Layouts the screen takes turns with, crossfading.</summary>
 	public RotationSettings Rotation { get; set; } = new RotationSettings();
 
+	/// <summary>
+	/// More than one 8.8" screen: the main screen (by serial) shows the chosen layout with game profiles, auto mode and
+	/// rotation; each other screen shows its own layout here (or the same as the main one) and has its own flip.
+	/// </summary>
+	public string MainScreen { get; set; } = "";
+
+	public List<ScreenSettings> Screens { get; set; } = new List<ScreenSettings>();
+
+	public ScreenSettings ScreenFor(string serial)
+	{
+		ScreenSettings? s = Screens.FirstOrDefault((ScreenSettings x) => x.Serial.Equals(serial, StringComparison.OrdinalIgnoreCase));
+		if (s == null)
+		{
+			s = new ScreenSettings { Serial = serial, Flip = Flip };
+			Screens.Add(s);
+		}
+		return s;
+	}
+
 	/// <summary>Look for a newer LumaLi on GitHub once a day.</summary>
 	public bool CheckUpdates { get; set; } = true;
 
@@ -102,6 +121,18 @@ public sealed class Settings
 		Fans.Add(fanScreen);
 		return fanScreen;
 	}
+}
+
+/// <summary>An extra 8.8" screen's own settings.</summary>
+public sealed class ScreenSettings
+{
+	public string Serial { get; set; } = "";
+
+	/// <summary>The layout it shows; empty = the same as the main screen.</summary>
+	public string Layout { get; set; } = "";
+
+	/// <summary>Turned 180° (mounted the other way up).</summary>
+	public bool Flip { get; set; }
 }
 
 /// <summary>Layout rotation: the screen shows each listed layout in turn for a few minutes.</summary>

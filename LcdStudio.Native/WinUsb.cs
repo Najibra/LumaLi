@@ -284,6 +284,31 @@ public sealed class WinUsb : IDisposable
 		return array[2];
 	}
 
+	/// <summary>
+	/// Why a device would not open, in words: WinUSB lets one program at a time open a device, so "access denied" means
+	/// another program holds it; LumaLi then names that program when it can find it.
+	/// </summary>
+	private static Win32Exception OpenError(UsbDeviceInfo info, int code)
+	{
+		switch (code)
+		{
+		case 5:
+		case 32:
+		{
+			string holders = DeviceHolders.Describe(info.Path);
+			return new Win32Exception(code, holders.Length > 0
+				? $"held by {holders}. Close it (or turn off its control of this device) and LumaLi takes over in a few seconds."
+				: "held by another program (Windows error " + code + "). Close any RGB or Lian Li software (L-Connect, SignalRGB, OpenRGB, iCUE, …).");
+		}
+		case 2:
+		case 3:
+		case 1167:
+			return new Win32Exception(code, "unplugged or reset by Windows (error " + code + "); LumaLi will retry.");
+		default:
+			return new Win32Exception(code, $"Windows could not open it (error {code}: {new Win32Exception(code).Message})");
+		}
+	}
+
 	public WinUsb(UsbDeviceInfo info, bool resetPipes = true)
 	{
 		Info = info;
@@ -292,7 +317,7 @@ public sealed class WinUsb : IDisposable
 			_file = CreateFile(info.Path, 3221225472u, 3u, IntPtr.Zero, 3u, 1073741952u, IntPtr.Zero);
 			if (_file.IsInvalid)
 			{
-				throw new Win32Exception(Marshal.GetLastWin32Error(), info.Name + " is in use by another program (close L-Connect).");
+				throw OpenError(info, Marshal.GetLastWin32Error());
 			}
 			if (!WinUsb_Initialize(_file, out _handle))
 			{

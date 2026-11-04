@@ -824,6 +824,11 @@ public sealed class SettingsPage : Page
 		{
 			sb.AppendLine("Also running: " + string.Join(", ", rivals));
 		}
+		string[] lighting = Engine.LightingApps();
+		if (lighting.Length > 0)
+		{
+			sb.AppendLine("Other lighting/monitoring software running: " + string.Join(", ", lighting));
+		}
 		sb.AppendLine();
 		sb.AppendLine("Outputs:");
 		foreach (OutputStatus o in e.AllOutputs())

@@ -38,6 +38,17 @@ public sealed class HomePage : Page
 
 	private readonly Select _layoutSelect;
 
+	// the 8.8" screens after the first, each with its own layout and flip
+	private readonly Card _others;
+
+	private readonly Stack _otherRows = new Stack();
+
+	private readonly List<ScreenPreview> _otherPreviews = new List<ScreenPreview>();
+
+	private string _otherKey = "";
+
+	private readonly Btn _identifyScreens;
+
 	private readonly FlowLayoutPanel _fanRow;
 
 	private readonly Label _fanEmpty;
@@ -240,6 +251,11 @@ public sealed class HomePage : Page
 				}, primary: false, "\uf0e2")
 			}
 		};
+		_identifyScreens = new Btn("Identify screens", delegate
+		{
+			E.IdentifyScreens();
+			Main.Toast("Each 8.8\" screen shows its number");
+		}, primary: false, "");
 		card2.Controls.Add(new Stack
 		{
 			Controls = 
@@ -283,6 +299,10 @@ public sealed class HomePage : Page
 				(Control?)value4
 			}
 		});
+		_others = AddCard("More 8.8\" screens", 1080);
+		_others.Controls.Add(_otherRows);
+		_others.Visible = false;
+		Body.SetFlowBreak(_others, value: true);
 		Card card4 = AddCard("Cooling", 700);
 		Stack stack = new Stack(horizontal: true);
 		(string, string)[] array2 = new(string, string)[6]
@@ -431,6 +451,126 @@ public sealed class HomePage : Page
 		}
 	}
 
+	/// <summary>A row per extra 8.8" screen: its preview, its own layout (or the same as screen 1), flip, make it screen 1.</summary>
+	private void RefreshOtherScreens()
+	{
+		List<OutputStatus> extras = E.ExtraScreens.ToList();
+		string key = string.Join("|", extras.Select((OutputStatus s) => s.Serial)) + "#" + string.Join("|", E.VisibleLayouts().Select((ScreenLayout l) => l.Name));
+		_identifyScreens.Visible = extras.Count > 0;
+		_others.Visible = extras.Count > 0;
+		if (key == _otherKey)
+		{
+			return;
+		}
+		_otherKey = key;
+		_otherRows.SuspendLayout();
+		// the Identify button is kept across rebuilds
+		_identifyScreens.Parent?.Controls.Remove(_identifyScreens);
+		foreach (Control c in _otherRows.Controls.Cast<Control>().ToList())
+		{
+			c.Dispose();
+		}
+		_otherRows.Controls.Clear();
+		_otherPreviews.Clear();
+		_otherRows.Controls.Add(new Stack(horizontal: true)
+		{
+			Margin = new Padding(0, 0, 0, Theme.S(8f)),
+			Controls =
+			{
+				(Control?)new Caption("Each screen can show its own layout. Screen 1 also follows game profiles, auto mode and rotation; the light strips match screen 1.", Theme.SubText, null, 840),
+				(Control?)_identifyScreens
+			}
+		});
+		const string Same = "Same as screen 1";
+		foreach (OutputStatus status in extras)
+		{
+			string serial = status.Serial;
+			ScreenSettings own;
+			lock (E.Settings)
+			{
+				own = E.Settings.ScreenFor(serial);
+			}
+			ScreenPreview preview = new ScreenPreview(E)
+			{
+				Size = new Size(Theme.S(400f), Theme.S(100f)),
+				Source = () => E.LayoutForScreen(serial),
+				Margin = new Padding(0, 0, Theme.S(14f), Theme.S(10f))
+			};
+			_otherPreviews.Add(preview);
+			Select layout = new Select(new[] { Same }.Concat(E.VisibleLayouts().Select((ScreenLayout l) => l.Name)), own.Layout.Length == 0 ? Same : own.Layout)
+			{
+				Width = Theme.S(230f)
+			};
+			layout.SelectedIndexChanged += delegate
+			{
+				lock (E.Settings)
+				{
+					own.Layout = layout.SelectedItem == Same || layout.SelectedItem == null ? "" : layout.SelectedItem;
+				}
+				E.SaveSoon();
+				preview.Tick(force: true);
+			};
+			Toggle flip = new Toggle("Upside down", own.Flip);
+			flip.CheckedChanged += delegate
+			{
+				lock (E.Settings)
+				{
+					own.Flip = flip.Checked;
+				}
+				E.SaveSoon();
+			};
+			Btn main = new Btn("Make it screen 1", delegate
+			{
+				lock (E.Settings)
+				{
+					// the old screen 1 keeps showing what it showed: its layout and flip move to its own entry
+					string old = E.Screen.Serial;
+					if (old.Length > 0)
+					{
+						ScreenSettings was = E.Settings.ScreenFor(old);
+						was.Layout = E.Settings.Layout;
+						was.Flip = E.Settings.Flip;
+					}
+					if (own.Layout.Length > 0)
+					{
+						E.Settings.Layout = own.Layout;
+					}
+					E.Settings.Flip = own.Flip;
+					E.Settings.MainScreen = serial;
+				}
+				E.SaveSoon();
+				E.Acquire();
+				Main.Toast("Restarting the screens");
+				Refresh0();
+			}, primary: false, "");
+			_otherRows.Controls.Add(new Stack(horizontal: true)
+			{
+				Controls =
+				{
+					(Control?)preview,
+					(Control?)new Stack
+					{
+						Controls =
+						{
+							(Control?)new Caption(status.Name.Replace("8.8\" screen", "Screen")),
+							(Control?)new Stack(horizontal: true)
+							{
+								Controls =
+								{
+									(Control?)new Caption("Layout"),
+									(Control?)layout
+								}
+							},
+							(Control?)flip,
+							(Control?)main
+						}
+					}
+				}
+			});
+		}
+		_otherRows.ResumeLayout();
+	}
+
 	private void SetMode(string mode)
 	{
 		lock (E.Settings)
@@ -487,6 +627,7 @@ public sealed class HomePage : Page
 				_fanRow.Controls.Add(fanPreview);
 			}
 		}
+		RefreshOtherScreens();
 		_fanEmpty.Visible = _fanPreviews.Count == 0;
 		_fanRow.Height = ((_fanPreviews.Count != 0) ? Theme.S((_fanPreviews.Count > 3) ? 210 : 106) : 0);
 	}
@@ -560,6 +701,10 @@ public sealed class HomePage : Page
 			item2.Invalidate();
 		}
 		_screen.Tick();
+		foreach (ScreenPreview other in _otherPreviews)
+		{
+			other.Tick();
+		}
 		foreach (FanPreview fanPreview in _fanPreviews)
 		{
 			fanPreview.Tick();

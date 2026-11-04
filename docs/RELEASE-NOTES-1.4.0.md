@@ -40,6 +40,20 @@ Music, weather and a screen that takes turns with your favourite layouts. For ea
 - **Telemetry** and **Telemetry Dark** fan faces: the reading in big rolling figures, with a 40-second bar history and
   a peak line.
 
+## Two (or more) 8.8" screens
+
+- **Every 8.8" screen connected now runs at once.** Each extra screen gets a row on Home under **More 8.8" screens**,
+  with its own preview, its own layout (or "Same as screen 1") and its own **Upside down** switch. **Make it screen 1**
+  picks which one follows game profiles, auto mode and rotation. **Identify screens** shows a big number on each.
+- Each screen's light strip runs too; they all match screen 1's colours.
+
+## Fixed
+
+- **"Screen light strip is in use by another program" with L-Connect closed** ([#1](https://github.com/Najibra/LumaLi/issues/1)):
+  only one program can drive a USB device at a time, and the message always blamed L-Connect. LumaLi now says what
+  Windows actually reported, and when another program holds the device it names that program (for example an RGB
+  app), so you know what to close. The device report also lists other lighting and monitoring software that's running.
+
 ## Also new
 
 - **Update notice:** LumaLi checks GitHub once a day and shows a note on Home when a newer version is out, with a

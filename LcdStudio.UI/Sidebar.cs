@@ -91,7 +91,9 @@ public sealed class Sidebar : Control
 			Theme.DrawText(graphics, _items[i], flag ? Theme.BodyBold : Theme.Body, flag ? Theme.Text : Color.FromArgb(196, 198, 204), new RectangleF(rectangle.X + Theme.S(44f), rectangle.Y, rectangle.Width - Theme.S(48f), rectangle.Height));
 		}		List<(string, string, Color)> list = new List<(string, string, Color)>
 		{
-			("Screen", (!_engine.Screen.Present) ? "none found" : ((!_engine.Screen.Running) ? _engine.Screen.State.Split(':')[0] : (_engine.Screen.State.Contains("redraws") ? "on · still layout" : $"{_engine.Screen.Fps:0} fps")), Dot(_engine.Screen)),
+			_engine.ExtraScreens.Count > 0
+				? ("Screens", $"{_engine.AllScreens.Count((OutputStatus s) => s.Running)} of {_engine.AllScreens.Count()}", _engine.AllScreens.Any((OutputStatus s) => s.Running) ? Theme.Good : Theme.Faint)
+				: ("Screen", (!_engine.Screen.Present) ? "none found" : ((!_engine.Screen.Running) ? _engine.Screen.State.Split(':')[0] : (_engine.Screen.State.Contains("redraws") ? "on · still layout" : $"{_engine.Screen.Fps:0} fps")), Dot(_engine.Screen)),
 			("Fan screens", (_engine.FanOutputs.Count == 0) ? "none found" : $"{_engine.FanOutputs.Count((OutputStatus f) => f.Running)} of {_engine.FanOutputs.Count}", _engine.FanOutputs.Any((OutputStatus f) => f.Running) ? Theme.Good : Theme.Faint),
 			("Light strip", (!_engine.Strip.Present) ? "none found" : (_engine.Settings.Lighting.StripOn ? "on" : "off"), Dot(_engine.Strip)),
 			("Fan lights", (_engine.Hub == null) ? "—" : (_engine.Settings.Lighting.FansOn ? _engine.Settings.Lighting.FanEffect : "off"), (_engine.Hub != null) ? Theme.Good : Theme.Faint),

@@ -28,6 +28,8 @@ One small `.exe`, no installer, no account, no telemetry.
 - **Weather:** set your city in Settings and get an animated Weather fan face and weather readings (Open-Meteo, free).
 - **Layout rotation:** the screen takes turns with the layouts you pick, and every layout change now crossfades.
 - **Telemetry:** a sage-and-orange mission dashboard layout, with two matching fan faces.
+- **Two or more 8.8" screens:** each one runs with its own layout and its own upside-down switch (Home › More 8.8" screens).
+- **Fixed** the light strip's "in use by another program" error ([#1](https://github.com/Najibra/LumaLi/issues/1)): LumaLi now names the program holding the device.
 - **Update notice** on Home, and the warning colour on the Neon Ring and Reactor faces.
 
 ![Now Playing and Weather fan faces](docs/fan-faces-1.4.jpg)

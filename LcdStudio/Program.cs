@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -607,6 +607,28 @@ public static class Program
 			File.WriteAllLines(file, lines);
 			return 0;
 		}
+		if (args2.Contains("--who-holds"))
+		{
+			// --who-holds <out.txt> [file]: which programs hold each Lian Li USB device open (or, for a test, a file).
+			// Read-only; opens no device.
+			string[] a = args2.SkipWhile((string x) => x != "--who-holds").Skip(1).ToArray();
+			var lines = new List<string>();
+			if (a.Length > 1)
+			{
+				string? nt = LcdStudio.Native.DeviceHolders.NtNameOfFile(a[1]);
+				lines.Add($"{a[1]} = {nt}: {string.Join(", ", nt == null ? new List<string>() : LcdStudio.Native.DeviceHolders.Find(nt, device: false))}");
+			}
+			else
+			{
+				foreach (UsbDeviceInfo d in WinUsb.Enumerate())
+				{
+					string? pdo = LcdStudio.Native.DeviceHolders.PdoName(WinUsb.InstanceId(d.Path));
+					lines.Add($"{d.Name} {d.Serial} = {pdo}: {(pdo == null ? "" : string.Join(", ", LcdStudio.Native.DeviceHolders.Find(pdo, device: true)))}");
+				}
+			}
+			File.WriteAllLines(a.FirstOrDefault() ?? "who-holds.txt", lines);
+			return 0;
+		}
 		if (args2.Contains("--media-probe"))
 		{
 			// --media-probe <file> [city]: what Windows says is playing (three reads 2 s apart, cover saved beside the file)
@@ -857,6 +879,11 @@ public static class Program
 			if (flag3)
 			{
 				engine.StartSensorsOnly();
+				// --demo-screens: the Home page as it looks with a second 8.8" screen (for previews; nothing is sent)
+				if (args2.Contains("--demo-screens"))
+				{
+					engine.ExtraScreens.Add(new OutputStatus { Name = "8.8\" screen 2", Serial = "DEMO-SCREEN-2", Kind = DeviceKind.Screen, Present = true, Running = true, Fps = 30.0, State = "connected · 30 fps" });
+				}
 			}
 			else
 			{
