@@ -113,6 +113,8 @@ public static partial class Templates
 		return new List<ScreenLayout>
 		{
 			CommandCenter(),
+			NowPlayingLayout(),
+			Telemetry(),
 			Machined(),
 			RetroRack(),
 			Clearance(),
@@ -393,6 +395,38 @@ public static partial class Templates
 			Color2 = "#120b08"
 		};
 		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "interstellar", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Now Playing: the song Windows is playing (cover, title, equaliser, progress), the clock, the weather and five readings.</summary>
+	private static ScreenLayout NowPlayingLayout()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Now Playing",
+			Description = "The song playing in Spotify, a browser or any player: its cover glowing over a blurred wash of it, title, artist, a dancing equaliser and progress, with the clock, the weather and five readings",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#0a0a0e",
+			Color2 = "#0a0a0e"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "nowplaying", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
+		return l;
+	}
+
+	/// <summary>Telemetry: a sage, orange and charcoal mission dashboard with a bar chart, a 60 s history and stat cards.</summary>
+	private static ScreenLayout Telemetry()
+	{
+		ScreenLayout l = new ScreenLayout
+		{
+			Name = "Telemetry",
+			Description = "A sage, orange and charcoal mission dashboard: eight live bars, the time, a scrolling 60-second CPU/GPU history, temperature cards and network, fan and frame-rate stats",
+			BuiltIn = true,
+			Background = "solid",
+			Color1 = "#2b2e2d",
+			Color2 = "#2b2e2d"
+		};
+		l.Widgets.Add(new Widget { Kind = WidgetKind.Panel, Effect = "telemetry", X = 0, Y = 0, W = 1920, H = 480, Text = "", Float = true });
 		return l;
 	}
 

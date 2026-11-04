@@ -46,7 +46,7 @@ public sealed partial class ScreenRenderer
 	{
 		if (w.Effect != "machined" || w.Kind != WidgetKind.Panel)
 		{
-			return false;
+			return DrawTelemetry(g, w, r, t);
 		}
 		Machined(g, t);
 		return true;

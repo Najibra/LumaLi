@@ -49,6 +49,27 @@ public sealed partial class Faces
 		return warn;
 	}
 
+	/// <summary>Faces that turn to the fan's warning colour past its Warn at level.</summary>
+	public static bool Warns(string face) => face is "Lottie Gauge" or "Neon Ring" or "Reactor";
+
+	/// <summary>
+	/// The face's two colours turned toward the warning: a deep shade of the warning colour to the colour itself (so
+	/// it stays rich rather than mixing the fan's own colours into a pale wash), then the whole light breathing darker
+	/// and back. Unchanged while there is no warning.
+	/// </summary>
+	private static FaceContext Warned(FaceContext x, GlowState s, double dt)
+	{
+		float warn = WarnStep(x, s, dt, out float dim);
+		if (warn <= 0.002f)
+		{
+			return x;
+		}
+		Color hot = Imaging.Hex(x.Fan.WarnColor, Color.FromArgb(255, 90, 60));
+		Color deep = Imaging.Mix(hot, Color.Black, 0.45);
+		Color c1 = Imaging.Mix(x.C1, deep, warn), c2 = Imaging.Mix(x.C2, hot, warn);
+		return x with { C1 = Imaging.Mix(c1, Color.Black, dim), C2 = Imaging.Mix(c2, Color.Black, dim) };
+	}
+
 	/// <summary>Where the fan's Warn at level sits along its sensor's range (0 to 1), or -1 when there is none.</summary>
 	private static float WarnLevel(FanScreen fan)
 	{

@@ -54,7 +54,11 @@ public sealed class Sensors : IDisposable
 		new SensorDef("fans.rpm", "Case fan speed", "RPM", 0f, 3000f),
 		new SensorDef("fans.duty", "Case fan duty", "%", 0f, 100f),
 		new SensorDef("game.fps", "Game frame rate", "FPS", 0f, 240f),
-		new SensorDef("top.cpu", "Busiest app's CPU share", "%", 0f, 100f)
+		new SensorDef("top.cpu", "Busiest app's CPU share", "%", 0f, 100f),
+		new SensorDef("media.progress", "Song progress", "%", 0f, 100f),
+		new SensorDef("weather.temp", "Outdoor temperature", "°C", -10f, 50f),
+		new SensorDef("weather.humidity", "Outdoor humidity", "%", 0f, 100f),
+		new SensorDef("weather.wind", "Wind speed", "km/h", 0f, 80f)
 	};
 
 	private const int HistoryLength = 120;
@@ -323,7 +327,70 @@ public sealed class Sensors : IDisposable
 		}
 		Network();
 		GameFrameRate();
+		Media();
+		WeatherReadings();
 		_text["uptime"] = Uptime();
+	}
+
+	/// <summary>
+	/// What's playing as readings: {media.title}, {media.artist}, {media.album}, {media.app}, {media.state} (Playing /
+	/// Paused), {media.elapsed} and {media.length} ("1:23"), and media.progress (%). Gone while nothing plays.
+	/// </summary>
+	private void Media()
+	{
+		MediaInfo? m = NowPlaying.Current;
+		if (m == null)
+		{
+			Remove("media.progress");
+			foreach (string k in new[] { "media.title", "media.artist", "media.album", "media.app", "media.state", "media.elapsed", "media.length" })
+			{
+				_text.TryRemove(k, out _);
+			}
+			return;
+		}
+		_text["media.title"] = m.Title;
+		_text["media.artist"] = m.Artist;
+		_text["media.album"] = m.Album;
+		_text["media.app"] = m.App;
+		_text["media.state"] = m.Playing ? "Playing" : "Paused";
+		_text["media.elapsed"] = MediaInfo.Clock(m.PositionNow);
+		_text["media.length"] = m.Length > 0.0 ? MediaInfo.Clock(m.Length) : "";
+		if (m.Length > 0.0)
+		{
+			Set("media.progress", m.Progress * 100f);
+		}
+		else
+		{
+			Remove("media.progress");
+		}
+	}
+
+	/// <summary>
+	/// The weather as readings: weather.temp (°C), weather.humidity, weather.wind, and the text {weather.degrees}
+	/// (in the chosen unit, "31°"), {weather.text} ("Partly cloudy"), {weather.place}, {weather.high}, {weather.low}.
+	/// </summary>
+	private void WeatherReadings()
+	{
+		WeatherNow? w = Weather.Current;
+		if (w == null)
+		{
+			Remove("weather.temp");
+			Remove("weather.humidity");
+			Remove("weather.wind");
+			foreach (string k in new[] { "weather.degrees", "weather.text", "weather.place", "weather.high", "weather.low" })
+			{
+				_text.TryRemove(k, out _);
+			}
+			return;
+		}
+		Set("weather.temp", (float)w.Temp);
+		Set("weather.humidity", (float)w.Humidity);
+		Set("weather.wind", (float)w.Wind);
+		_text["weather.degrees"] = Weather.Degrees(w.Temp);
+		_text["weather.text"] = w.Text;
+		_text["weather.place"] = w.Place.Split(',')[0];
+		_text["weather.high"] = Weather.Degrees(w.High);
+		_text["weather.low"] = Weather.Degrees(w.Low);
 	}
 
 	private static string Uptime()

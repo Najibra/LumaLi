@@ -21,7 +21,7 @@ public sealed partial class Faces : IDisposable
 	}
 
 	/// <summary>Faces that are a whole picture in themselves (stone, paper, their own light), which keep it over any background.</summary>
-	public static readonly HashSet<string> OwnBackdrop = new HashSet<string> { "Carved", "Deer", "Headline", "Lightbeam", "Airframe", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter" };
+	public static readonly HashSet<string> OwnBackdrop = new HashSet<string> { "Carved", "Deer", "Headline", "Lightbeam", "Airframe", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter", "Telemetry", "Telemetry Dark", "Now Playing" };
 
 	/// <summary>Whether this face shows the fan's background behind it.</summary>
 	public static bool TakesBackground(string face) => !OwnBackdrop.Contains(face);
@@ -46,7 +46,7 @@ public sealed partial class Faces : IDisposable
 	public static readonly string[] Names =
 	{
 		"Glass Slab", "Fading", "Molten Glass", "Neon Ring", "Dot Matrix", "Carved", "Liquid", "Reactor", "3D Number", "Light on Text",
-		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Mission Control", "Interstellar", "Airframe", "Dot Time", "Rolling Time", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter", "Lottie Gauge", "Image / GIF"
+		"Prism Glass", "Warp", "Cut Paper", "Balloon", "Clock", "Blade", "Gap", "Deer", "Headline", "Lightbeam", "Mission Control", "Interstellar", "Airframe", "Dot Time", "Rolling Time", "Analog Dial", "Station Clock", "Sport Dial", "Rack Porthole", "Rack Meter", "Telemetry", "Telemetry Dark", "Now Playing", "Weather", "Lottie Gauge", "Image / GIF"
 	};
 
 	private readonly Dictionary<string, Image?> _images = new Dictionary<string, Image>();
@@ -111,6 +111,10 @@ public sealed partial class Faces : IDisposable
 			"Sport Dial" => (First: "Cream", Second: "Accent"),
 			"Rack Porthole" => (First: "Plate", Second: "Cream"),
 			"Rack Meter" => (First: "Plate", Second: "Needle"),
+			"Telemetry" => (First: "Card", Second: "Accent"),
+			"Telemetry Dark" => (First: "Panel", Second: "Accent"),
+			"Now Playing" => (First: "Glow", Second: "Ring"),
+			"Weather" => (First: "Sky", Second: "Sun"),
 			"Lottie Gauge" => (First: "Start", Second: "End"),
 			_ => (First: "Text", Second: "Tint"), 
 		};
@@ -149,6 +153,10 @@ public sealed partial class Faces : IDisposable
 			"Sport Dial" => ("#ece8cf", "#e8472c"),
 			"Rack Porthole" => ("#f06c2e", "#ece8dc"),
 			"Rack Meter" => ("#f06c2e", "#d8261a"),
+			"Telemetry" => ("#cddfcd", "#f2683c"),
+			"Telemetry Dark" => ("#2b2e2d", "#f2683c"),
+			"Now Playing" => ("#ff4b2b", "#7a3cff"),
+			"Weather" => ("#2a64d6", "#ffb23a"),
 			"Lottie Gauge" => ("#3af0ff", "#ff3d8b"),
 			_ => ("#ffffff", "#000000"), 
 		};
@@ -160,7 +168,8 @@ public sealed partial class Faces : IDisposable
 		{
 			try
 			{
-				value = new FontFamily(name);
+				// Montserrat ships inside the exe; anything else comes from Windows
+				value = BundledFonts.Family(name) ?? new FontFamily(name);
 			}
 			catch
 			{
@@ -409,6 +418,18 @@ public sealed partial class Faces : IDisposable
 			break;
 		case "Rack Meter":
 			RackMeterFace(x);
+			break;
+		case "Telemetry":
+			TelemetryFace(x, dark: false);
+			break;
+		case "Telemetry Dark":
+			TelemetryFace(x, dark: true);
+			break;
+		case "Now Playing":
+			NowPlayingFace(x);
+			break;
+		case "Weather":
+			WeatherFace(x);
 			break;
 		case "Lottie Gauge":
 			LottieGauge(x, image);
@@ -881,16 +902,7 @@ public sealed partial class Faces : IDisposable
 			(string c1, string c2) = DefaultColors("Lottie Gauge");
 			x = x with { C1 = Imaging.Hex(c1, Color.Cyan), C2 = Imaging.Hex(c2, Color.DeepPink) };
 		}
-		float warn = WarnStep(x, s, dt, out float dim);
-		if (warn > 0.002f)
-		{
-			// the sweep runs from a deep shade of the warning colour to the colour itself, so it stays rich rather than
-			// mixing the fan's own colours into a pale wash; then the whole light breathes darker and back
-			Color hot = Imaging.Hex(x.Fan.WarnColor, Color.FromArgb(255, 90, 60));
-			Color deep = Imaging.Mix(hot, Color.Black, 0.45);
-			Color c1 = Imaging.Mix(x.C1, deep, warn), c2 = Imaging.Mix(x.C2, hot, warn);
-			x = x with { C1 = Imaging.Mix(c1, Color.Black, dim), C2 = Imaging.Mix(c2, Color.Black, dim) };
-		}
+		x = Warned(x, s, dt);
 		Color now = Imaging.Mix(x.C1, x.C2, f);
 		if (bg != null && Lottie.GaugeTime(bg, f, out double at))
 		{

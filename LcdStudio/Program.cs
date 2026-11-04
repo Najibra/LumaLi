@@ -96,6 +96,21 @@ public static class Program
 			bitmap.Save(array[3], ImageFormat.Png);
 			return 0;
 		}
+		// previews: --demo-media [playing|paused|none] shows a made-up song; --demo-weather Kind[,night] (Clear, Partly,
+		// Cloudy, Fog, Rain, Snow, Storm) made-up weather for Dubai
+		if (args2.Contains("--demo-media"))
+		{
+			string state = args2.SkipWhile((string x) => x != "--demo-media").Skip(1).FirstOrDefault() ?? "playing";
+			if (state != "none")
+			{
+				NowPlaying.Demo(playing: state != "paused");
+			}
+		}
+		if (args2.Contains("--demo-weather"))
+		{
+			string[] wk = (args2.SkipWhile((string x) => x != "--demo-weather").Skip(1).FirstOrDefault() ?? "Clear").Split(',');
+			Weather.Demo(wk[0], day: !(wk.Length > 1 && wk[1] == "night"));
+		}
 		if (args2.Contains("--render-layout"))
 		{
 			string[] a2 = args2.SkipWhile((string x) => x != "--render-layout").Skip(1).ToArray();
@@ -588,6 +603,52 @@ public static class Program
 				long ms = sw.ElapsedMilliseconds;
 				var busy = top.Sample();
 				lines.Add($"monitor {(p == null ? "unavailable" : string.Join(", ", p.Select(MonitorColors.Hex)))} ({ms} ms) · activity {LcdStudio.Core.Activity.Detect(sensors)} · busiest {busy?.Name ?? "?"} {busy?.Percent:0.0}%");
+			}
+			File.WriteAllLines(file, lines);
+			return 0;
+		}
+		if (args2.Contains("--media-probe"))
+		{
+			// --media-probe <file> [city]: what Windows says is playing (three reads 2 s apart, cover saved beside the file)
+			// and, with a city, its weather. Read-only; touches no device.
+			string[] a = args2.SkipWhile((string x) => x != "--media-probe").Skip(1).ToArray();
+			string file = a.FirstOrDefault() ?? "media-probe.txt";
+			var lines = new List<string>();
+			NowPlaying.Start();
+			for (int i = 0; i < 3; i++)
+			{
+				Thread.Sleep(2000);
+				MediaInfo? m = NowPlaying.Current;
+				var art = NowPlaying.Art;
+				lines.Add(m == null ? "nothing playing" : $"{m.App} · {(m.Playing ? "playing" : "paused")} · \"{m.Title}\" by \"{m.Artist}\" on \"{m.Album}\" · {MediaInfo.Clock(m.PositionNow)} / {MediaInfo.Clock(m.Length)} · art {(art.Art == null ? "none" : art.Art.Width + "x" + art.Art.Height)} colours {string.Join(", ", art.Colors.Select(c => c.ToString()))}");
+				if (art.Art != null)
+				{
+					using SkiaSharp.SKData png = art.Art.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+					File.WriteAllBytes(Path.ChangeExtension(file, ".cover.png"), png.ToArray());
+				}
+			}
+			if (a.Length > 1)
+			{
+				try
+				{
+					var found = Weather.FindAsync(a[1]).GetAwaiter().GetResult();
+					lines.Add(found == null ? "weather: place not found" : $"weather place: {found.Value.Place} {found.Value.Lat:0.###},{found.Value.Lon:0.###}");
+					if (found != null)
+					{
+						var ws = new WeatherSettings { City = a[1], Place = found.Value.Place, Latitude = found.Value.Lat, Longitude = found.Value.Lon };
+						Weather.Start(() => ws);
+						for (int i = 0; i < 20 && Weather.Current == null; i++)
+						{
+							Thread.Sleep(500);
+						}
+						WeatherNow? w = Weather.Current;
+						lines.Add(w == null ? "weather: no answer" : $"weather: {w.Temp:0.0} °C feels {w.Feels:0.0}, {w.Text} ({w.Kind}, code {w.Code}), {(w.IsDay ? "day" : "night")}, humidity {w.Humidity:0}%, wind {w.Wind:0} km/h, {w.Low:0}–{w.High:0}, sun {w.Sunrise:HH:mm}–{w.Sunset:HH:mm}");
+					}
+				}
+				catch (Exception ex)
+				{
+					lines.Add("weather: " + ex.Message);
+				}
 			}
 			File.WriteAllLines(file, lines);
 			return 0;

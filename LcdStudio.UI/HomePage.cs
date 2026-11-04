@@ -20,6 +20,10 @@ public sealed class HomePage : Page
 
 	private readonly Card _cpuHint;
 
+	private readonly Card _update;
+
+	private readonly Caption _updateText;
+
 	private readonly Caption _cpuHintText;
 
 	private readonly Btn _cpuHintAdmin;
@@ -156,6 +160,43 @@ public sealed class HomePage : Page
 		});
 		_cpuHint.Visible = false;
 		Body.SetFlowBreak(_cpuHint, value: true);
+		// a newer LumaLi on GitHub: a note with a button to its page (nothing is downloaded by the app)
+		_update = AddCard("Update", 1080);
+		_updateText = new Caption("", Theme.Text, Theme.Body) { AutoSize = false, Size = new Size(Theme.S(1040f), Theme.S(26f)) };
+		_update.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)_updateText,
+				(Control?)new Stack(horizontal: true)
+				{
+					Controls =
+					{
+						(Control?)new Btn("Open the download page", delegate
+						{
+							try
+							{
+								System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Updates.Page) { UseShellExecute = true });
+							}
+							catch
+							{
+							}
+						}, primary: true),
+						(Control?)new Btn("Hide", delegate
+						{
+							lock (E.Settings)
+							{
+								E.Settings.HiddenUpdate = Updates.Available ?? "";
+							}
+							E.SaveSoon();
+							_update.Visible = false;
+						})
+					}
+				}
+			}
+		});
+		_update.Visible = false;
+		Body.SetFlowBreak(_update, value: true);
 		Card card2 = AddCard("8.8\" screen", 700);
 		_screen = new ScreenPreview(E)
 		{
@@ -471,6 +512,20 @@ public sealed class HomePage : Page
 			_cpuHintAdmin.Visible = !admin;
 			_cpuHintDriver.Visible = !pawn;
 			_cpuHint.Visible = missing;
+		}
+		string? newer = E.Settings.CheckUpdates ? Updates.Available : null;
+		bool showUpdate = newer != null && newer != E.Settings.HiddenUpdate;
+		if (showUpdate)
+		{
+			string text = $"LumaLi {newer} is available (you have {Updates.Running.ToString(3)}). Download it from GitHub, exit LumaLi from the tray, and replace LumaLi.exe; your layouts and settings stay.";
+			if (_updateText.Text != text)
+			{
+				_updateText.Text = text;
+			}
+		}
+		if (_update.Visible != showUpdate)
+		{
+			_update.Visible = showUpdate;
 		}
 		List<string> notes = E.Settings.Smart.HealthWatch ? E.HealthNotes : new List<string>();
 		string healthText = string.Join("\n", notes);

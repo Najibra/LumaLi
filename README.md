@@ -19,6 +19,21 @@ One small `.exe`, no installer, no account, no telemetry.
 > LumaLi is an independent community project. It is not made, endorsed or supported by Lian Li.
 > Close L-Connect before running it: two programs cannot drive the same USB devices at once.
 
+## New in 1.4
+
+![Now Playing layout](docs/layouts/now-playing.jpg)
+
+- **Now Playing:** the song playing in Spotify, a browser or any player, with its cover, an equaliser, progress, the
+  clock, the weather and five readings. There's a fan face too, and `{media.title}`-style readings for any layout.
+- **Weather:** set your city in Settings and get an animated Weather fan face and weather readings (Open-Meteo, free).
+- **Layout rotation:** the screen takes turns with the layouts you pick, and every layout change now crossfades.
+- **Telemetry:** a sage-and-orange mission dashboard layout, with two matching fan faces.
+- **Update notice** on Home, and the warning colour on the Neon Ring and Reactor faces.
+
+![Now Playing and Weather fan faces](docs/fan-faces-1.4.jpg)
+
+Details: [release notes](docs/RELEASE-NOTES-1.4.0.md).
+
 ## New in 1.3
 
 ![The new LumaLi app](docs/app/home.jpg)
@@ -85,7 +100,7 @@ Most layouts draw a frame in 1–6 ms, and layouts without animation only redraw
 | ![Deer](docs/layouts/deer.jpg) **Deer** — a dotted LED dashboard | ![Carousel](docs/layouts/carousel.jpg) **Carousel** — a turning carousel of glass cards |
 | ![Right Now](docs/layouts/right-now.jpg) **Right Now** — poster numbers that stamp on every change | ![Eclipse](docs/layouts/eclipse.jpg) **Eclipse** — sunrise over a planet's edge |
 
-…plus Machined, Retro Rack, Clearance, Jellyfish, Station Clock and Sport Dial (new in 1.3.2), Mission Control, Interstellar, Interstellar Micro and Airframe (above), Lightbeam (top of this page), nine vertical layouts, Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
+…plus Now Playing and Telemetry (new in 1.4), Machined, Retro Rack, Clearance, Jellyfish, Station Clock and Sport Dial (new in 1.3.2), Mission Control, Interstellar, Interstellar Micro and Airframe (above), Lightbeam (top of this page), nine vertical layouts, Paper Cut, Lighthouse, Pixel, Prism, Stretch, Gap, Blade, Vinyl, Balloon, Classic, Neon Grid, Heat Wave, Glass Tunnel, Carved, Minimal Clock and Focus GPU. Every layout is animated live from your sensors.
 
 ### Fan screens (400 × 400)
 

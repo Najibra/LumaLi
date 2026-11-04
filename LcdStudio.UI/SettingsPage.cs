@@ -260,14 +260,17 @@ public sealed class SettingsPage : Page
 		{
 			Visible = !IsAdmin()
 		};
+		Toggle updates = new Toggle("Tell me when a new LumaLi is out (checks GitHub once a day)", settings.CheckUpdates);
+		updates.CheckedChanged += delegate { Change(delegate(Settings x) { x.CheckUpdates = updates.Checked; }); };
 		card4.Controls.Add(new Stack
 		{
-			Controls = 
+			Controls =
 			{
 				(Control?)_startup,
 				(Control?)elevated,
 				(Control?)_tray,
 				(Control?)_minimized,
+				(Control?)updates,
 				(Control?)_cpuTemp,
 				(Control?)value,
 				(Control?)new Btn("Exit LumaLi", Main.ExitApp)
@@ -339,7 +342,9 @@ public sealed class SettingsPage : Page
 			}
 		});
 		BuildGameRows();
+		BuildRotationCard(settings);
 		BuildSmartCard(settings);
+		BuildWeatherCard(settings);
 		AddCard("About", 1074).Controls.Add(new Stack
 		{
 			Controls = 
@@ -452,6 +457,179 @@ public sealed class SettingsPage : Page
 				(Control?)health,
 				(Control?)_healthState,
 				(Control?)Note("Screen layouts can show the busiest app with {top.app} and its share of the processor with {top.cpu:0}%.")
+			}
+		});
+	}
+
+	private Stack _rotationRows = null!;
+
+	private Caption _rotationState = null!;
+
+	/// <summary>Layout rotation: the screen takes turns with the listed layouts, a few minutes each, crossfading.</summary>
+	private void BuildRotationCard(Settings settings)
+	{
+		RotationSettings rot = settings.Rotation;
+		Card card = AddCard("Layout rotation", 1074);
+		Toggle on = new Toggle("Take turns with the layouts below, crossfading from one to the next", rot.Enabled);
+		on.CheckedChanged += delegate { Change(delegate(Settings x) { x.Rotation.Enabled = on.Checked; }); };
+		FormGrid grid = new FormGrid(150);
+		Slide(grid, "Each for", 1, 60, rot.Minutes, delegate(Settings x, int v) { x.Rotation.Minutes = v; }, " min");
+		_rotationRows = new Stack();
+		string pick = "Add a layout…";
+		Select add = new Select(new[] { pick }.Concat(E.VisibleLayouts().Select((ScreenLayout l) => l.Name)), pick) { Width = Theme.S(300f) };
+		add.SelectedIndexChanged += delegate
+		{
+			string? chosen = add.SelectedItem?.ToString();
+			if (chosen == null || chosen == pick)
+			{
+				return;
+			}
+			Change(delegate(Settings x)
+			{
+				if (!x.Rotation.Layouts.Contains(chosen))
+				{
+					x.Rotation.Layouts.Add(chosen);
+				}
+			});
+			BeginInvoke(delegate
+			{
+				add.SelectedItem = pick;
+				BuildRotationRows();
+			});
+		};
+		_rotationState = new Caption("", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(22f)) };
+		card.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)on,
+				(Control?)new Caption("Needs two layouts or more. A game profile and auto mode still come first. Any change of layout on the screen now crossfades.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(24f)) },
+				(Control?)grid,
+				(Control?)_rotationRows,
+				(Control?)add,
+				(Control?)_rotationState
+			}
+		});
+		BuildRotationRows();
+	}
+
+	private void BuildRotationRows()
+	{
+		_rotationRows.SuspendLayout();
+		while (_rotationRows.Controls.Count > 0)
+		{
+			_rotationRows.Controls[0].Dispose();
+		}
+		List<string> names;
+		lock (E.Settings)
+		{
+			names = E.Settings.Rotation.Layouts.ToList();
+		}
+		for (int i = 0; i < names.Count; i++)
+		{
+			string n = names[i];
+			int at = i;
+			Caption name = new Caption($"{i + 1}.  {n}", Theme.Text, Theme.Body)
+			{
+				AutoSize = false,
+				AutoEllipsis = true,
+				Size = new Size(Theme.S(420f), Theme.S(30f)),
+				TextAlign = ContentAlignment.MiddleLeft
+			};
+			Btn upBtn = new Btn("Up", delegate
+			{
+				Change(delegate(Settings x)
+				{
+					List<string> l = x.Rotation.Layouts;
+					int k = l.IndexOf(n);
+					if (k > 0)
+					{
+						(l[k - 1], l[k]) = (l[k], l[k - 1]);
+					}
+				});
+				BeginInvoke(BuildRotationRows);
+			}) { Enabled = at > 0 };
+			Btn remove = new Btn("Remove", delegate
+			{
+				Change(delegate(Settings x) { x.Rotation.Layouts.Remove(n); });
+				BeginInvoke(BuildRotationRows);
+			});
+			_rotationRows.Controls.Add(new Stack(horizontal: true) { Controls = { (Control?)name, (Control?)upBtn, (Control?)remove } });
+		}
+		if (names.Count == 0)
+		{
+			_rotationRows.Controls.Add(new Caption("No layouts yet: add two or more.", Theme.Faint, Theme.Small));
+		}
+		_rotationRows.ResumeLayout();
+	}
+
+	private Caption _weatherState = null!;
+
+	/// <summary>Weather: the place (looked up by name), °C or °F. Shown by the Now Playing layout, the Weather fan face and the {weather.…} readings.</summary>
+	private void BuildWeatherCard(Settings settings)
+	{
+		WeatherSettings ws = settings.Weather;
+		Card card = AddCard("Weather", 1074);
+		TextField city = new TextField(ws.City, 300);
+		Btn find = null!;
+		_weatherState = new Caption(ws.On ? "Showing the weather for " + ws.Place + "." : "Off: type a city and press Find.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(22f)) };
+		async void Find()
+		{
+			string name = city.Text.Trim();
+			if (name.Length == 0)
+			{
+				Change(delegate(Settings x) { x.Weather.City = ""; x.Weather.Place = ""; x.Weather.Latitude = 0; x.Weather.Longitude = 0; });
+				Weather.Refresh();
+				_weatherState.Text = "Off: type a city and press Find.";
+				return;
+			}
+			find.Enabled = false;
+			_weatherState.Text = "Looking up " + name + "…";
+			try
+			{
+				var found = await Weather.FindAsync(name);
+				if (found == null)
+				{
+					_weatherState.Text = "Couldn't find \"" + name + "\". Try the city's name in English.";
+					return;
+				}
+				var (place, lat, lon) = found.Value;
+				Change(delegate(Settings x) { x.Weather.City = name; x.Weather.Place = place; x.Weather.Latitude = lat; x.Weather.Longitude = lon; });
+				Weather.Refresh();
+				_weatherState.Text = "Showing the weather for " + place + ".";
+			}
+			catch (Exception ex)
+			{
+				_weatherState.Text = "Couldn't reach the weather service: " + ex.Message;
+			}
+			finally
+			{
+				find.Enabled = true;
+			}
+		}
+		find = new Btn("Find", Find, primary: true);
+		city.Box.KeyDown += (object? s, KeyEventArgs e) =>
+		{
+			if (e.KeyCode == Keys.Enter)
+			{
+				e.SuppressKeyPress = true;
+				Find();
+			}
+		};
+		Toggle fahrenheit = new Toggle("Show °F instead of °C", ws.Fahrenheit);
+		fahrenheit.CheckedChanged += delegate
+		{
+			Change(delegate(Settings x) { x.Weather.Fahrenheit = fahrenheit.Checked; });
+			Weather.Fahrenheit = fahrenheit.Checked;
+		};
+		card.Controls.Add(new Stack
+		{
+			Controls =
+			{
+				(Control?)new Stack(horizontal: true) { Controls = { (Control?)new Caption("City"), (Control?)city, (Control?)find } },
+				(Control?)_weatherState,
+				(Control?)fahrenheit,
+				(Control?)new Caption("From Open-Meteo (free, no account), every 15 minutes; only the place's position is sent. Layouts can show {weather.degrees}, {weather.text}, {weather.place}, {weather.high} and {weather.low}; songs: {media.title}, {media.artist}, {media.elapsed}.", Theme.SubText, Theme.Small) { AutoSize = false, Size = new Size(Theme.S(1000f), Theme.S(40f)) }
 			}
 		});
 	}
@@ -858,6 +1036,12 @@ public sealed class SettingsPage : Page
 		if (_smartState.Text != smart)
 		{
 			_smartState.Text = smart;
+		}
+		RotationSettings rot = E.Settings.Rotation;
+		string rotText = !rot.Enabled ? "Off." : rot.Layouts.Count(n => E.Layouts.Any(l => l.Name == n)) < 2 ? "Add at least two layouts." : "On the screen now: " + E.ShownLayout.Name + ".";
+		if (_rotationState.Text != rotText)
+		{
+			_rotationState.Text = rotText;
 		}
 		string healthText = !E.Settings.Smart.HealthWatch ? "" : E.HealthNotes.Count > 0 ? "⚠ " + string.Join("  ⚠ ", E.HealthNotes) : E.HealthSummary;
 		if (_healthState.Text != healthText)

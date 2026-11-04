@@ -73,6 +73,18 @@ public sealed class Settings
 	/// <summary>The Home page's note on how to get the CPU temperature was hidden.</summary>
 	public bool HideCpuTempHint { get; set; }
 
+	/// <summary>The place whose weather the layouts and fan faces show.</summary>
+	public WeatherSettings Weather { get; set; } = new WeatherSettings();
+
+	/// <summary>Layouts the screen takes turns with, crossfading.</summary>
+	public RotationSettings Rotation { get; set; } = new RotationSettings();
+
+	/// <summary>Look for a newer LumaLi on GitHub once a day.</summary>
+	public bool CheckUpdates { get; set; } = true;
+
+	/// <summary>The update note for this version was hidden ("1.4.0").</summary>
+	public string HiddenUpdate { get; set; } = "";
+
 	public FanScreen FanFor(string serial)
 	{
 		string serial2 = serial;
@@ -89,5 +101,27 @@ public sealed class Settings
 		};
 		Fans.Add(fanScreen);
 		return fanScreen;
+	}
+}
+
+/// <summary>Layout rotation: the screen shows each listed layout in turn for a few minutes.</summary>
+public sealed class RotationSettings
+{
+	public bool Enabled { get; set; }
+
+	public int Minutes { get; set; } = 5;
+
+	public List<string> Layouts { get; set; } = new List<string>();
+
+	/// <summary>Which listed layout is up now: by the clock, so every part of the app agrees without sharing a timer.</summary>
+	public string? Now(DateTime now, Func<string, bool> exists)
+	{
+		List<string> names = Layouts.Where(exists).ToList();
+		if (!Enabled || names.Count < 2)
+		{
+			return null;
+		}
+		long slot = (long)Math.Floor((now - new DateTime(2000, 1, 1)).TotalMinutes / Math.Max(1, Minutes));
+		return names[(int)(slot % names.Count)];
 	}
 }

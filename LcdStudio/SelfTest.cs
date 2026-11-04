@@ -483,6 +483,13 @@ internal static class SelfTest
 
 	private static void Model()
 	{
+		var rotation = new RotationSettings { Enabled = true, Minutes = 5, Layouts = new List<string> { "A", "Gone", "B" } };
+		DateTime at = new DateTime(2026, 11, 4, 10, 0, 0);
+		string? r1 = rotation.Now(at, n => n != "Gone"), r2 = rotation.Now(at.AddMinutes(5), n => n != "Gone");
+		Check("Layout rotation takes turns by the clock and skips missing layouts", r1 != null && r2 != null && r1 != r2 && r1 != "Gone" && r2 != "Gone"
+			&& new RotationSettings { Enabled = true, Layouts = new List<string> { "A" } }.Now(at, _ => true) == null);
+		Check("Update check reads release tags", Updates.Parse("v1.3.2") == new Version(1, 3, 2) && Updates.Parse("1.4") == new Version(1, 4, 0) && Updates.Parse("beta") == null);
+		Check("Weather codes read as words and icon kinds", Weather.Describe(63) == "Rain" && Weather.KindOf(95) == "Storm" && Weather.KindOf(2) == "Partly" && Weather.KindOf(0) == "Clear");
 		ScreenLayout screenLayout = Templates.All()[0];
 		ScreenLayout screenLayout2 = Store.LayoutFromJson(Store.ToJson(screenLayout));
 		Check("Layout JSON round-trip", screenLayout2 != null && screenLayout2.Widgets.Count == screenLayout.Widgets.Count && screenLayout2.Widgets[3].Sensor == screenLayout.Widgets[3].Sensor);

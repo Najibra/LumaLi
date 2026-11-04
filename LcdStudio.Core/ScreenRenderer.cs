@@ -253,6 +253,8 @@ public sealed partial class ScreenRenderer : IDisposable
 				case "clearance":
 				case "retrorack":
 				case "machined":
+				case "telemetry":
+				case "nowplaying":
 					flag3 = true;
 					break;
 				default:

@@ -125,6 +125,7 @@ public sealed partial class Faces
 	private void NeonRing(FaceContext x)
 	{
 		var (s, f, dt) = GlowStep(x, "Neon Ring");
+		x = Warned(x, s, dt);
 		s.Orbit += dt * 1.6;
 		// the tube breathes slowly rather than flickering, so it never jumps from one frame to the next
 		float hum = 0.92f + 0.08f * (float)Math.Sin(x.T * 1.3);
@@ -182,6 +183,7 @@ public sealed partial class Faces
 	private void Reactor(FaceContext x)
 	{
 		var (s, f, dt) = GlowStep(x, "Reactor");
+		x = Warned(x, s, dt);
 		// every pace follows the reading, through phases of their own, so a change of pace never jumps
 		double pace = 0.6 + 0.8 * f;
 		s.Spin0 += dt * 48.0 * pace;

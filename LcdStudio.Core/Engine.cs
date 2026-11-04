@@ -116,6 +116,11 @@ public sealed class Engine : IDisposable
 				string name = Settings.Smart.LayoutFor(CurrentActivity);
 				shown = name.Length == 0 ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == name);
 			}
+			if (shown == null && Settings.Rotation.Enabled)
+			{
+				string? turn = Settings.Rotation.Now(DateTime.Now, (string n) => Layouts.Any((ScreenLayout l) => l.Name == n));
+				shown = turn == null ? null : Layouts.FirstOrDefault((ScreenLayout l) => l.Name == turn);
+			}
 			return shown ?? CurrentLayout;
 		}
 	}
@@ -394,6 +399,10 @@ public sealed class Engine : IDisposable
 	{
 		StartSensorsOnly();
 		Sensors.StartGameFps();
+		// what's playing, the weather and the update check: read-only, and only by the full app
+		NowPlaying.Start();
+		Weather.Start(() => Settings.Weather);
+		Updates.Start(() => Settings.CheckUpdates);
 		_smartOn = true;
 		Acquire();
 	}
@@ -938,6 +947,12 @@ public sealed class Engine : IDisposable
 		// the next is drawn and encoded; done one after the other the two would hold the screen near 20 fps
 		Task? sending = null;
 		ScreenTiming timing = new ScreenTiming();
+		// a change of layout (rotation, game profile, auto mode, a new pick) crossfades from the last frame of the one before
+		string? shownName = null;
+		ScreenLayout? shownBefore = null;
+		Bitmap? fadeFrom = null;
+		double fadeAt = 0.0;
+		const double FadeSeconds = 0.9;
 		using PreciseWait? pause = PreciseWait.Create();
 		void Sent()
 		{
@@ -991,8 +1006,31 @@ public sealed class Engine : IDisposable
 						screenLayout = standby ? StandbyLayout() : ShownLayout.Clone();
 					}
 					int brightness = standby ? Math.Min(Settings.ScreenBrightness, Settings.Standby.Brightness) : Settings.ScreenBrightness;
+					string nowName = (standby ? "standby|" : "") + screenLayout.Name;
+					if (shownName != null && nowName != shownName && shownBefore != null && shownBefore.Portrait == screenLayout.Portrait)
+					{
+						fadeFrom?.Dispose();
+						fadeFrom = null;
+						try
+						{
+							fadeFrom = screenRenderer.Render(shownBefore, Time);
+							fadeAt = Time;
+						}
+						catch (Exception ex3)
+						{
+							Log.Write("crossfade: " + ex3.Message);
+						}
+					}
+					shownName = nowName;
+					shownBefore = screenLayout;
+					bool fading = fadeFrom != null && Time - fadeAt < FadeSeconds;
+					if (fadeFrom != null && !fading)
+					{
+						fadeFrom.Dispose();
+						fadeFrom = null;
+					}
 					bool flag = ScreenRenderer.IsAnimated(screenLayout);
-					string text2 = (flag ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
+					string text2 = (flag || fading ? null : string.Join("|", Sensors.Version, EditVersion, screenLayout.Name, DateTime.Now.ToString(ScreenRenderer.ShowsSeconds(screenLayout) ? "HHmmss" : "HHmm"), Settings.Flip, Settings.ScreenQuality, brightness));
 					if (text2 != null && text2 == text && array != null && (DateTime.UtcNow - dateTime).TotalSeconds < 2.0)
 					{
 						Wait(ct, 100, wake);
@@ -1007,6 +1045,11 @@ public sealed class Engine : IDisposable
 					{
 						long r0 = Stopwatch.GetTimestamp();
 						using Bitmap bitmap = screenRenderer.Render(screenLayout, Time);
+						if (fading && fadeFrom != null)
+						{
+							double k = Math.Clamp((Time - fadeAt) / FadeSeconds, 0.0, 1.0);
+							Imaging.Blend(bitmap, fadeFrom, (float)(1.0 - k * k * (3.0 - 2.0 * k)));
+						}
 						long r1 = Stopwatch.GetTimestamp();
 						// the light strip, when it matches the screen, takes its colours from this frame as drawn
 						if (Settings.Lighting.StripMatchesScreen && Strip.Present)

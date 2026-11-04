@@ -507,7 +507,7 @@ internal sealed class FanCard : Card
 		_rotation.SetSilently(_fan.Rotation.ToString());
 		_style.SetSilently(_fan.GaugeStyle);
 		_style.Visible = _styleLabel.Visible = _fan.Face == "Lottie Gauge";
-		_warnRow.Visible = _warnLabel.Visible = _fan.Face == "Lottie Gauge";
+		_warnRow.Visible = _warnLabel.Visible = Faces.Warns(_fan.Face);
 		if (!float.TryParse(_warnAt.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float shown) || shown != _fan.WarnAt)
 		{
 			_warnAt.Text = WarnText(_fan.WarnAt);

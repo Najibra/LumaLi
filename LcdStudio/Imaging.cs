@@ -31,6 +31,37 @@ public static class Imaging
 		return memoryStream.ToArray();
 	}
 
+	/// <summary>Mixes src over dst in place: amount 1 shows only src, 0 leaves dst. Both the same size; ~2 ms at 1920 × 480.</summary>
+	public static unsafe void Blend(Bitmap dst, Bitmap src, float amount)
+	{
+		if (dst.Width != src.Width || dst.Height != src.Height || amount <= 0f)
+		{
+			return;
+		}
+		int a = (int)(Math.Clamp(amount, 0f, 1f) * 256f), b = 256 - a;
+		Rectangle rect = new Rectangle(0, 0, dst.Width, dst.Height);
+		BitmapData d = dst.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+		BitmapData s = src.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+		try
+		{
+			for (int y = 0; y < rect.Height; y++)
+			{
+				byte* pd = (byte*)d.Scan0 + (long)y * d.Stride;
+				byte* ps = (byte*)s.Scan0 + (long)y * s.Stride;
+				int n = rect.Width * 4;
+				for (int i = 0; i < n; i++)
+				{
+					pd[i] = (byte)((pd[i] * b + ps[i] * a) >> 8);
+				}
+			}
+		}
+		finally
+		{
+			src.UnlockBits(s);
+			dst.UnlockBits(d);
+		}
+	}
+
 	public static Bitmap Rotated(Bitmap src, int degrees)
 	{
 		degrees = (degrees % 360 + 360) % 360;
